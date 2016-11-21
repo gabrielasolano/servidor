@@ -9,6 +9,7 @@ int main(int argc , char *argv[])
 {
   int socket_id;
   int conector;
+  int i;
   struct sockaddr_in dest_addr;
   char *message, server_reply[2000];
   FILE *fp;
@@ -47,15 +48,27 @@ int main(int argc , char *argv[])
   if (recv(socket_id, server_reply, 2000, 0) < 0)
   {
     puts("recv failed.\n");
+    return 1;
   }
   puts("Reply received\n");
   puts(server_reply);
   
   /* Salva p'agina no arquivo */
-  /* Verifica se arquivo ja existe */
-  if (fp = fopen(argv[2], "w"))
+  /* Percorre resposta do servidor at'e encontrar o in'icio do arquivo html */
+  i = 0;
+  while (server_reply[i] != '<')
   {
-    printf("Existe arquivo\n");
+    i++;
   }
+    
+  /* Grava o html no arquivo informado */
+  fp = fopen(argv[2], "w");
+  while (server_reply[i] != '\0')
+  {
+    fprintf(fp, "%c", server_reply[i]);
+    i++;
+  }
+  
+  fclose(fp);
   return 0;
 }

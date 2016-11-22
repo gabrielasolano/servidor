@@ -9,6 +9,7 @@
 int criar_socket();
 char *recupera_ip(char *host);
 char *recupera_http(char *host, char *pagina);
+void mensagem_formato();
     
 FILE *fp;
     
@@ -25,23 +26,41 @@ int main(int argc, char **argv)
   char buffer[BUFSIZ+1];
   char *host;
   char *pagina;
+  char flag;
   
   /* Verifica quantidade de parametros da linha de comando */
-  if (argc != 3)
+  if (argc != 3 && argc != 4)
   {
-    printf("Linha de comando incompleta.\n");
-    return 1;
+    printf("Linha de comando incorreta!\n");
+    mensagem_formato();
+    exit(1);
+  }
+  else if (argc == 4)
+  {
+    flag  = argv[3][0];
   }
   
   host = argv[1];
   pagina = argv[2];
-  fp = fopen(pagina, "w");
   
-  /* Verifica correta abertura do arquivo */
-  if (fp == NULL)
+  /* Verificacao de arquivo */
+  if ((fp = fopen(pagina, "r")) != NULL)       /* Arquivo ja existe */
   {
-    perror("Erro ao abrir arquivo");
-    exit(2);
+    fclose(fp);
+    if ((argc == 4) && (flag == 'T'))
+    {
+      fp = fopen(pagina, "w");
+    }
+    else
+    {
+      perror("Arquivo ja existe");
+      mensagem_formato();
+      exit(1);
+    }
+  }
+  else                                          /* Arquivo nao existe */
+  {
+    fp = fopen(pagina, "w");
   }
   
   /* Cria o Socket */
@@ -51,7 +70,7 @@ int main(int argc, char **argv)
   ip = recupera_ip(host);
   printf("IP: %s\n", ip);
   
-  /* Seta endereco */
+  /* Configura o socket */
   remote = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in *));
   remote->sin_family = AF_INET;
   remote->sin_port = htons(PORT);
@@ -73,7 +92,7 @@ int main(int argc, char **argv)
     exit(1);
   }
   
-  /* Conexao (com validacao de erro) */
+  /* Conexao */
   if (connect(sock, (struct sockaddr *)remote, sizeof(struct sockaddr)) < 0)
   {
     perror("Erro ao conectar");
@@ -91,7 +110,7 @@ int main(int argc, char **argv)
     /* Retorna o numero de bytes enviado */
     aux_remote = send(sock, http+enviado, strlen(http)-enviado, 0);   
     if(aux_remote == -1){
-      perror("Erro ao enviar http.\n");
+      perror("Erro ao enviar http");
       exit(1);
     }
     enviado += aux_remote;
@@ -103,7 +122,7 @@ int main(int argc, char **argv)
   char * htmlcontent;
   while ((aux_remote = recv(sock, buffer, BUFSIZ, 0)) > 0) /* Retorna o tamanho da mensagem */
   {
-    if (htmlstart == 0)                         /* Ignora o cabecalo HTTP*/
+    if (htmlstart == 0)                         /* Ignora o cabecalo HTTP */
     {
       htmlcontent = strstr(buffer, "\r\n\r\n");
       if(htmlcontent != NULL)
@@ -119,6 +138,7 @@ int main(int argc, char **argv)
     if (htmlstart)                              /* Grava o html no arquivo */
     {
       fprintf(fp, "%s", htmlcontent);
+      /*fwrite(htmlcontent, (aux_remote - (htmlcontent - buffer)), 1, fp);*/
     }
     
     memset(buffer, 0, aux_remote);  /* Zera o buffer para ao gravar o html diversas vezes */
@@ -126,7 +146,7 @@ int main(int argc, char **argv)
   
   if(aux_remote < 0)
   {
-    perror("Error receiving data");
+    perror("Erro no recebimento da mensagem");
   }
   
   free(http);
@@ -142,7 +162,7 @@ int criar_socket()
   sock = socket(AF_INET, SOCK_STREAM, 0);
   if (sock < 0)
   {
-    perror("Socket nao criado.\n");
+    perror("Socket nao criado");
     exit(1);
   }
   return sock;
@@ -176,12 +196,19 @@ char *recupera_http(char *host, char *pagina)
   char *getpage = pagina;
   char *cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
   
+  /* Remove '/' do inicio da string pagina (caso exista) */
   if(getpage[0] == '/'){
     getpage = getpage + 1;
-    printf("Removing leading \"/\", converting %s to %s\n", pagina, getpage);
   }
-  /* -5 is to consider the %s %s %s in cabecalho and the ending \0 */
+  
+  /* -5 considera os %s no cabecalho e o \0 final */
   http = (char *)malloc(strlen(host)+strlen(getpage)+strlen(USERAGENT)+strlen(cabecalho)-5);
   sprintf(http, cabecalho, getpage, host, USERAGENT);
   return http;
+}
+
+void mensagem_formato()
+{
+  printf("Formato: ./recuperador www.pagina.com /path/arquivo T.\n");
+  printf("T: flag optativa que forca a sobrescrita do arquivo.\n");
 }

@@ -10,7 +10,7 @@
 int criar_socket();
 char *recupera_http(char *host, char *pagina);
 void recupera_ip(char *host, char *ip);
-void mensagem_formato();
+void formato_mesagem();
 void configura_socket(char *ip, struct sockaddr_in **remote);
 void envia_http_servidor(int sock, char *http);
 void recupera_pagina(int sock, char *pagina);
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
   if ((argc != 3) && (argc != 4))
   {
     printf("Linha de comando incorreta!\n");
-    mensagem_formato();
+    formato_mesagem();
     exit(1);
   }
   else if (argc == 4)
@@ -56,15 +56,11 @@ int main(int argc, char **argv)
     else
     {
       perror("Arquivo ja existe");
-      mensagem_formato();
+      formato_mesagem();
       exit(1);
     }
   }
-  else                                      /* Arquivo nao existe */
-  {
-   /* fp = fopen(pagina, "wb");*/
-  }
-  
+
   sock = criar_socket();
   
   ip = malloc(16);       /* XXX.XXX.XXX.XXX\0 */
@@ -109,8 +105,8 @@ int criar_socket()
 void recupera_ip (char *host, char *ip)
 {
   struct hostent *hent;
-  int tam_ip = 15;                        /* XXX.XXX.XXX.XXX */
-  memset(ip, 0, tam_ip + 1);              /* Seta string ip com 0s */
+  int tam_ip = 15;                            /* XXX.XXX.XXX.XXX */
+  memset(ip, 0, tam_ip + 1);                  /* Seta string ip com 0s */
 
   if ((hent = gethostbyname(host)) == NULL)   /* Recupera IP a partir host */
   {
@@ -131,13 +127,12 @@ char *recupera_http (char *host, char *pagina)
   char *http;
   char *getpage = pagina;
   const char *cabecalho;
-  
-  cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
-  
   int tam_host = strlen(host);
   int tam_getpage;
   int tam_useragent = strlen(USERAGENT);
   int tam_cabecalho = strlen(cabecalho);
+  
+  cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
   
   /* Remove '/' do inicio da string pagina (caso exista) */
   if(getpage[0] == '/'){
@@ -160,14 +155,6 @@ void configura_socket (char *ip, struct sockaddr_in **remote)
   (*remote)->sin_family = AF_INET;
   (*remote)->sin_port = htons(PORT);
   aux = inet_pton(AF_INET, ip, (void *) (&((*remote)->sin_addr.s_addr)));
-  
-  /* Converte a string ip em um endereco de rede (aloca em 
-remote->sin_addr.s_addr) 
-   * aux = 1 : sucesso na conversao
-   * aux = 0 : ip nao contem um endereco valido para a family 
-especificada
-   * aux = -1 : endereco family setado invalido
-   */
   
   if (aux < 0)                     
   {
@@ -205,16 +192,17 @@ void recupera_pagina (int sock, char *pagina)
   int estado = 0;
   int bytes;
   char buffer[1];
-  
-  clock_t tempo_inicial, tempo_final;
   double tempo_gasto;
+  clock_t tempo_inicial, tempo_final;
   
   fp = fopen(pagina, "wb");
   
   /* Zera o buffer */
   memset(buffer, 0, sizeof(buffer));       
   
-  /* Maquina de estados */
+  /* Maquina de estados: ignora cabecalho inicial HTTP
+   * e grava o restante no arquivo fp
+   */
   tempo_inicial = clock();
   while ((bytes = recv(sock, buffer, sizeof(buffer), 0)) > 0)
   {
@@ -257,7 +245,7 @@ void recupera_pagina (int sock, char *pagina)
   printf("Tempo decorrido: %.0f segundos\n", tempo_gasto);
 }
 
-void mensagem_formato ()
+void formato_mesagem ()
 {
   printf("Formato: ./recuperador www.pagina.com /path/arquivo T.\n");
   printf("T: flag optativa que forca a sobrescrita do arquivo.\n");

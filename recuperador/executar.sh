@@ -11,6 +11,8 @@ echo
 echo "HTML"
 echo
 ./recuperadorWeb www.cic.unb.br cic.html T
+echo "Arquivo criado"
+echo
 
 #Executa o recuperadorWeb para um arquivo bin
 echo "bin"

@@ -201,43 +201,33 @@ void envia_http_servidor (int sock, char *http)
 void recupera_pagina (int sock, char *pagina)
 {
   int htmlstart = 0;
+  int estado = 0;
   int aux_remote;
-  char buffer[BUFSIZ+1];
+  char buffer[1];
   char *htmlcontent;
   
   fp = fopen(pagina, "wb");
   
   /* Zera o buffer */
-  memset(buffer, 0, sizeof(buffer));            
+  memset(buffer, 0, sizeof(buffer));       
   
-  /* Retorna o tamanho da mensagem */
-  while ((aux_remote = recv(sock, buffer, BUFSIZ, 0)) > 0) 
+  /* Maquina de estados */
+  while (aux_remote = recv(sock, buffer, 1, 0) > 0)
   {
-    if (htmlstart == 0)                       /* Ignora o cabecalo HTTP */
+    /* Ignora o cabecalho do buffer para gravar no htmlcontent */
+    if (estado == 0 && buffer[0] == '\r')
+      estado = 1;
+    if (estado == 1 && buffer[0] == '\n')
+      estado = 2;
+    if (estado == 2 && buffer[0] == '\r')
+      estado = 3;
+    if (estado == 3 && buffer[0] == '\n')
+      htmlstart = 1;
+    if (htmlstart == 1)
     {
-      htmlcontent = strstr(buffer, "\r\n\r\n");
-      if(htmlcontent != NULL)
-      {
-        htmlstart = 1;
-        htmlcontent += 4;
-      }
+        htmlcontent = buffer;
+        fwrite(htmlcontent, (aux_remote - (htmlcontent - buffer)), 1, fp);
     }
-    else                                      /* Recupera apenas o html */
-    {
-      htmlcontent = buffer;
-    }
-    if (htmlstart)                            /* Grava o html no arquivo */
-    {
-      /* aux_remote: tamanho da mensagem retornada
-       * htmlcontent: buffer sem o cabecalho HTTP
-       * buffer: toda a mensagem retornada
-       * 
-       * Para escrever no arquivo: ignora lixos
-       */
-      fwrite(htmlcontent, (aux_remote - (htmlcontent - buffer)), 1, fp);
-    }
-    
-    /* Zera o buffer para nao gravar o html diversas vezes */
     memset(buffer, 0, aux_remote);  
   }
   

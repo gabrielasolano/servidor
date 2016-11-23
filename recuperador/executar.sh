@@ -17,24 +17,24 @@ echo
 #Executa o recuperadorWeb para um arquivo bin
 echo "bin"
 echo
-mkdir -p Arquivos
-./recuperadorWeb lovelace.aker.com.br Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin T
+#mkdir -p Arquivos
+./recuperadorWeb lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivoBin.bin T
 echo "Arquivo criado na pasta Arquivos"
 echo
 
 #Executa o recuperadorWeb para um arquivo iso
 echo "ISO"
 echo
-mkdir -p ISOs
-./recuperadorWeb lovelace.aker.com.br ISOs/Fedora-15-i686-Live-Desktop.iso T
+#mkdir -p ISOs
+./recuperadorWeb lovelace.aker.com.br/ISOs/Fedora-15-i686-Live-Desktop.iso arquivoIso.iso T
 echo "Arquivo criado na pasta ISOs"
 echo
 
 #Executa o recuperadorWeb para um arquivo jpg
 echo "jpg"
 echo
-mkdir -p upload/tvcultura/programas
-./recuperadorWeb tvcultura.com.br upload/tvcultura/programas/programa-imagem-som.jpg T
+#mkdir -p upload/tvcultura/programas
+./recuperadorWeb tvcultura.com.br/upload/tvcultura/programas/programa-imagem-som.jpg imagem.jpg T
 echo "Arquivo criado na pasta upload/tvcultura/programas"
 echo
 echo

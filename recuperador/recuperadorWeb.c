@@ -42,16 +42,31 @@ int main(int argc, char **argv)
     flag  = argv[3][0];
   }
   
+  /*lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivo.bin*/
+  /* Retira as barras do host e coloca no arquivo 
+   * Entrada: argv[1] (lovelace.aker.com.br), argv[2] (Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin)
+   * Fazer:
+   * Entrada: argv[1] (lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin)
+   *          argv[2] (arquivo_qualquer.bin)
+   */
+  
+  /* Ate a primeira barra: host
+   * Tudo depois da primeira barra: pagina
+   * Gravar em argv[2]
+   */
+  strtok_r(argv[1], "/", &pagina);
   host = argv[1];
-  pagina = argv[2];
+
+  /*host = argv[1];
+  pagina = argv[2];*/
   
   /* Verificacao de arquivo */
-  if ((fp = fopen(pagina, "rb")) != NULL)   /* Arquivo ja existe */
+  if ((fp = fopen(argv[2], "rb")) != NULL)   /* Arquivo ja existe */
   {
     fclose(fp);
     if ((argc == 4) && (flag == 'T'))
     {
-      fp = fopen(pagina, "wb");
+      fp = fopen(argv[2], "wb");
     }
     else
     {
@@ -81,7 +96,7 @@ int main(int argc, char **argv)
   envia_http_servidor(sock, http);
   
   /* Recuperar pagina e grava no arquivo fp */
-  recupera_pagina(sock, pagina);
+  recupera_pagina(sock, argv[2]);
   
   free(http);
   free(remote);
@@ -107,10 +122,10 @@ void recupera_ip (char *host, char *ip)
   struct hostent *hent;
   int tam_ip = 15;                            /* XXX.XXX.XXX.XXX */
   memset(ip, 0, tam_ip + 1);                  /* Seta string ip com 0s */
-
   if ((hent = gethostbyname(host)) == NULL)   /* Recupera IP a partir host */
   {
     perror("Nao foi possivel recuperar o IP");
+    formato_mesagem();
     exit(1);
   }
   
@@ -118,6 +133,7 @@ void recupera_ip (char *host, char *ip)
   if (inet_ntop(AF_INET, (void *) hent->h_addr_list[0], ip, tam_ip) == NULL)
   {
     perror("Nao foi possivel converter host");
+    formato_mesagem();
     exit(1);
   }
 }

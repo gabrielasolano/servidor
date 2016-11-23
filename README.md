@@ -43,7 +43,8 @@ O trabalho deve ser concluído em 36h.
 Esse programa é uma evolução do anterior. Deve ser acrescentado o feature de controle de velocidade por conexão. Esse novo parâmetro de configuração determinará, em bytes/segundo, a taxa máxima de transferência de cada conexão efetuada por um cliente.
 
 O trabalho deve ser concluído em 16h.
-Servidor WEB com threads trabalhadoras
+
+## Servidor WEB com threads trabalhadoras
 
 O servidor do exercício anterior deverá ser modificado para que use um pool de threads (de tamanho configurável em tempo de compilação) e para que suporte o comando PUT do protocolo HTTP. As threads serão usadas para ler (GET) e escrever (PUT) os dados dos arquivos pedidos pelos clientes. Desta forma, a thread principal não fica bloqueada em nenhum ponto (com exceção do select() ou poll()). Sempre que a thread principal quiser ler um arquivo pedido por um cliente, ela envia a solicitação em uma fila e uma das threads do pool deverá tratar esta leitura. Assim que a leitura for feita, a thread que leu avisa a thread principal, que irá tratar os dados lidos. A mesma idéia será usada para o PUT, isto é, a thread principal envia um pedido e alguma thread o trata. A comunicação entre a thread principal e as threads filhas deverá usar o mecanismo ‘condition’ e a comunicação entre as threads filhas e a thread principal deverá ser feita usando sockets locais (SOCK_DGRAM). A API Posix Threads (pthread) deverá ser usado neste exercício.
 

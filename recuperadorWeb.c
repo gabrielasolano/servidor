@@ -5,10 +5,11 @@
 #include <netdb.h>
 #include <string.h>
 #include <unistd.h>
+#include <time.h> 
     
 int criar_socket();
-char *recupera_ip(char *host);
 char *recupera_http(char *host, char *pagina);
+void recupera_ip(char *host, char *ip);
 void mensagem_formato();
 void configura_socket(char *ip, struct sockaddr_in **remote);
 void envia_http_servidor(int sock, char *http);
@@ -66,7 +67,8 @@ int main(int argc, char **argv)
   
   sock = criar_socket();
   
-  ip = recupera_ip(host);
+  ip = malloc(16);       /* XXX.XXX.XXX.XXX\0 */
+  recupera_ip(host, ip);
   printf("IP: %s\n", ip);
   
   configura_socket(ip, &remote);
@@ -104,12 +106,11 @@ int criar_socket()
   return sock;
 }
 
-char *recupera_ip (char *host)
+void recupera_ip (char *host, char *ip)
 {
   struct hostent *hent;
-  int tamanho_ip = 15;                        /* XXX.XXX.XXX.XXX */
-  char *ip = (char *) malloc(tamanho_ip + 1);
-  memset(ip, 0, tamanho_ip + 1);              /* Seta string ip com 0s */
+  int tam_ip = 15;                        /* XXX.XXX.XXX.XXX */
+  memset(ip, 0, tam_ip + 1);              /* Seta string ip com 0s */
 
   if ((hent = gethostbyname(host)) == NULL)   /* Recupera IP a partir host */
   {
@@ -118,12 +119,11 @@ char *recupera_ip (char *host)
   }
   
   /* Converte endereco da rede em uma string (armazena em ip) */
-  if (inet_ntop(AF_INET, (void *)hent->h_addr_list[0], ip, tamanho_ip) == NULL)
+  if (inet_ntop(AF_INET, (void *) hent->h_addr_list[0], ip, tam_ip) == NULL)
   {
     perror("Nao foi possivel converter host");
     exit(1);
   }
-  return ip;
 }
 
 char *recupera_http (char *host, char *pagina)
@@ -146,34 +146,35 @@ char *recupera_http (char *host, char *pagina)
   tam_getpage = strlen(getpage);
   
   /* -5 considera os %s no cabecalho e o \0 final */
-  http = (char *) malloc(tam_host + tam_getpage + tam_useragent + tam_cabecalho - 5);
+  http = (char *) malloc(tam_host + tam_getpage 
+                          + tam_useragent + tam_cabecalho - 5);
   sprintf(http, cabecalho, getpage, host, USERAGENT);
   return http;
 }
 
 void configura_socket (char *ip, struct sockaddr_in **remote)
 {
-  int aux_remote;
+  int aux;
 
   (*remote) = (struct sockaddr_in *)malloc(sizeof(struct sockaddr_in *));
   (*remote)->sin_family = AF_INET;
   (*remote)->sin_port = htons(PORT);
-  aux_remote = inet_pton(AF_INET, ip, (void *)(&((*remote)->sin_addr.s_addr)));
+  aux = inet_pton(AF_INET, ip, (void *) (&((*remote)->sin_addr.s_addr)));
   
   /* Converte a string ip em um endereco de rede (aloca em 
 remote->sin_addr.s_addr) 
-   * aux_remote = 1 : sucesso na conversao
-   * aux_remote = 0 : ip nao contem um endereco valido para a family 
+   * aux = 1 : sucesso na conversao
+   * aux = 0 : ip nao contem um endereco valido para a family 
 especificada
-   * aux_remote = -1 : endereco family setado invalido
+   * aux = -1 : endereco family setado invalido
    */
   
-  if (aux_remote < 0)                     
+  if (aux < 0)                     
   {
     perror("Erro ao setar remote->sin_addr.s_addr");
     exit(1);
   }
-  else if (aux_remote == 0)              
+  else if (aux == 0)              
   {
     perror("Endereco de IP informado 'e invalido");
     exit(1);
@@ -184,16 +185,16 @@ void envia_http_servidor (int sock, char *http)
 {
   int enviado = 0;
   int tamanho_http = strlen(http);
-  int aux;
+  int bytes;
   while (enviado < tamanho_http)
   {
     /* Retorna o numero de bytes enviado  */
-    aux = send(sock, http + enviado, tamanho_http - enviado, 0);   
-    if(aux == -1){
+    bytes = send(sock, http + enviado, tamanho_http - enviado, 0);   
+    if(bytes == -1){
       perror("Erro ao enviar http");
       exit(1);
     }
-    enviado += aux;
+    enviado += bytes;
   } 
 }
 
@@ -202,9 +203,11 @@ void recupera_pagina (int sock, char *pagina)
 {
   int htmlstart = 0;
   int estado = 0;
-  int aux_remote;
+  int bytes;
   char buffer[1];
-  char *htmlcontent;
+  
+  clock_t tempo_inicial, tempo_final;
+  double tempo_gasto;
   
   fp = fopen(pagina, "wb");
   
@@ -212,29 +215,46 @@ void recupera_pagina (int sock, char *pagina)
   memset(buffer, 0, sizeof(buffer));       
   
   /* Maquina de estados */
-  while (aux_remote = recv(sock, buffer, 1, 0) > 0)
+  tempo_inicial = clock();
+  while ((bytes = recv(sock, buffer, sizeof(buffer), 0)) > 0)
   {
-    /* Ignora o cabecalho do buffer para gravar no htmlcontent */
-    if (estado == 0 && buffer[0] == '\r')
-      estado = 1;
-    if (estado == 1 && buffer[0] == '\n')
-      estado = 2;
-    if (estado == 2 && buffer[0] == '\r')
-      estado = 3;
-    if (estado == 3 && buffer[0] == '\n')
-      htmlstart = 1;
-    if (htmlstart == 1)
+    if (htmlstart == 0)
     {
-        htmlcontent = buffer;
-        fwrite(htmlcontent, (aux_remote - (htmlcontent - buffer)), 1, fp);
+      if (estado == 0 && buffer[0] == '\r')
+      {
+        estado = 1;
+      }
+      else if (estado == 1 && buffer[0] == '\n')
+      {
+        estado = 2;
+      }
+      else if (estado == 2 && buffer[0] == '\r')
+      {
+        estado = 3;
+      }
+      else if (estado == 3 && buffer[0] == '\n')
+      {
+        htmlstart = 1;   
+      }
+      else
+      {
+        estado = 0;
+      }
     }
-    memset(buffer, 0, aux_remote);  
+    else if (htmlstart == 1)
+    {
+        fwrite(buffer, bytes, 1, fp);
+    }
+    memset(buffer, 0, bytes);  
   }
   
-  if(aux_remote < 0)
+  if(bytes < 0)
   {
     perror("Erro no recebimento da mensagem");
   }
+  tempo_final = clock();
+  tempo_gasto = ((tempo_final - tempo_inicial) / CLOCKS_PER_SEC);
+  printf("Tempo decorrido: %.0f segundos\n", tempo_gasto);
 }
 
 void mensagem_formato ()

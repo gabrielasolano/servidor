@@ -12,7 +12,7 @@ char *recupera_http(char *host, char *pagina);
 void mensagem_formato();
 void configura_socket(char *ip, struct sockaddr_in **remote);
 void envia_http_servidor(int sock, char *http);
-void recupera_pagina(int sock);
+void recupera_pagina(int sock, char *pagina);
     
 FILE *fp;
     
@@ -45,12 +45,12 @@ int main(int argc, char **argv)
   pagina = argv[2];
   
   /* Verificacao de arquivo */
-  if ((fp = fopen(pagina, "r")) != NULL)       /* Arquivo ja existe */
+  if ((fp = fopen(pagina, "rb")) != NULL)   /* Arquivo ja existe */
   {
     fclose(fp);
     if ((argc == 4) && (flag == 'T'))
     {
-      fp = fopen(pagina, "w");
+      fp = fopen(pagina, "wb");
     }
     else
     {
@@ -59,9 +59,9 @@ int main(int argc, char **argv)
       exit(1);
     }
   }
-  else                                          /* Arquivo nao existe */
+  else                                      /* Arquivo nao existe */
   {
-    fp = fopen(pagina, "w");
+   /* fp = fopen(pagina, "wb");*/
   }
   
   sock = criar_socket();
@@ -83,7 +83,7 @@ int main(int argc, char **argv)
   envia_http_servidor(sock, http);
   
   /* Recuperar pagina e grava no arquivo fp */
-  recupera_pagina(sock);
+  recupera_pagina(sock, pagina);
   
   free(http);
   free(remote);
@@ -130,7 +130,9 @@ char *recupera_http (char *host, char *pagina)
 {
   char *http;
   char *getpage = pagina;
-  const char *cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
+  const char *cabecalho;
+  
+  cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
   
   int tam_host = strlen(host);
   int tam_getpage;
@@ -196,18 +198,22 @@ void envia_http_servidor (int sock, char *http)
 }
 
 /* Recuperar pagina e grava no arquivo fp */
-void recupera_pagina (int sock)
+void recupera_pagina (int sock, char *pagina)
 {
   int htmlstart = 0;
   int aux_remote;
   char buffer[BUFSIZ+1];
-  char * htmlcontent;
+  char *htmlcontent;
   
-  memset(buffer, 0, sizeof(buffer));            /* Zera o buffer */
-  while ((aux_remote = recv(sock, buffer, BUFSIZ, 0)) > 0) /* Retorna o tamanho 
-da mensagem */
+  fp = fopen(pagina, "wb");
+  
+  /* Zera o buffer */
+  memset(buffer, 0, sizeof(buffer));            
+  
+  /* Retorna o tamanho da mensagem */
+  while ((aux_remote = recv(sock, buffer, BUFSIZ, 0)) > 0) 
   {
-    if (htmlstart == 0)                         /* Ignora o cabecalo HTTP */
+    if (htmlstart == 0)                       /* Ignora o cabecalo HTTP */
     {
       htmlcontent = strstr(buffer, "\r\n\r\n");
       if(htmlcontent != NULL)
@@ -216,17 +222,23 @@ da mensagem */
         htmlcontent += 4;
       }
     }
-    else                                        /* Recupera apenas o html */
+    else                                      /* Recupera apenas o html */
     {
       htmlcontent = buffer;
     }
-    if (htmlstart)                              /* Grava o html no arquivo */
+    if (htmlstart)                            /* Grava o html no arquivo */
     {
-      fprintf(fp, "%s", htmlcontent);
+      /* aux_remote: tamanho da mensagem retornada
+       * htmlcontent: buffer sem o cabecalho HTTP
+       * buffer: toda a mensagem retornada
+       * 
+       * Para escrever no arquivo: ignora lixos
+       */
+      fwrite(htmlcontent, (aux_remote - (htmlcontent - buffer)), 1, fp);
     }
     
-    memset(buffer, 0, aux_remote);  /* Zera o buffer para ao gravar o html 
-diversas vezes */
+    /* Zera o buffer para nao gravar o html diversas vezes */
+    memset(buffer, 0, aux_remote);  
   }
   
   if(aux_remote < 0)

@@ -130,9 +130,10 @@ char *recupera_http (char *host, char *pagina)
   int tam_host = strlen(host);
   int tam_getpage;
   int tam_useragent = strlen(USERAGENT);
-  int tam_cabecalho = strlen(cabecalho);
+  int tam_cabecalho;
   
   cabecalho = "GET /%s HTTP/1.0\r\nHost: %s\r\nUser-Agent: %s\r\n\r\n";
+  tam_cabecalho = strlen(cabecalho);
   
   /* Remove '/' do inicio da string pagina (caso exista) */
   if(getpage[0] == '/'){

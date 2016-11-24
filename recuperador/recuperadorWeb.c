@@ -235,7 +235,7 @@ void recupera_pagina (int sock, char *pagina)
       {
         if (htmlstart)
         {
-          fwrite(buffer+1, sizeof(char), 1, fp);
+          fwrite(buffer+index, sizeof(char), 1, fp);
         }
         if (htmlstart == 0)
         {

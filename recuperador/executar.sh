@@ -35,4 +35,5 @@ echo "Arquivo JPG criado"
 echo
 echo
 echo "Script finalizado!"
+echo "Para verificar os arquivos execute o script verificar.sh"
 echo "Para remover os arquivos criado execute o script limpar.sh"

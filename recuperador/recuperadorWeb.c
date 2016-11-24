@@ -14,13 +14,16 @@ void formato_mesagem();
 void configura_socket(char *ip, struct sockaddr_in **remote);
 void envia_http_servidor(int sock, char *http);
 void recupera_pagina(int sock, char *pagina);
+void abre_arquivo_existente(char *arquivo, int num_param, char flag);
+void verifica_parametros(char **argv, int argc, char *flag);
     
 FILE *fp;
     
 #define PORT 80
 #define USERAGENT "HTMLGET 1.0"
+#define BUFFERSIZE 0
      
-int main(int argc, char **argv)
+int main (int argc, char **argv)
 {
   struct sockaddr_in *remote;
   int sock;
@@ -28,71 +31,41 @@ int main(int argc, char **argv)
   char *http;
   char *host;
   char *pagina;
-  char flag;
+  char flag = 'F';
   
-  /* Verifica quantidade de parametros da linha de comando */
-  if ((argc != 3) && (argc != 4))
-  {
-    printf("Linha de comando incorreta!\n");
-    formato_mesagem();
-    exit(1);
-  }
-  else if (argc == 4)
-  {
-    flag  = argv[3][0];
-  }
+  /* Verifica quantidade de parametros */
+  verifica_parametros(argv, argc, &flag);
   
-  /*lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivo.bin*/
-  /* Retira as barras do host e coloca no arquivo 
-   * Entrada: argv[1] (lovelace.aker.com.br), argv[2] (Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin)
-   * Fazer:
-   * Entrada: argv[1] (lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin)
-   *          argv[2] (arquivo_qualquer.bin)
-   */
+  /* Valida abertura de arquivo existente */
+  abre_arquivo_existente(argv[2], argc, flag);
   
-  /* Ate a primeira barra: host
-   * Tudo depois da primeira barra: pagina
-   * Gravar em argv[2]
-   */
+  /* Atribuicao parametros -> variaveis */
   strtok_r(argv[1], "/", &pagina);
   host = argv[1];
 
-  /*host = argv[1];
-  pagina = argv[2];*/
-  
-  /* Verificacao de arquivo */
-  if ((fp = fopen(argv[2], "rb")) != NULL)   /* Arquivo ja existe */
-  {
-    fclose(fp);
-    if ((argc == 4) && (flag == 'T'))
-    {
-      fp = fopen(argv[2], "wb");
-    }
-    else
-    {
-      perror("Arquivo ja existe");
-      formato_mesagem();
-      exit(1);
-    }
-  }
-
+  /* Cria socket */
   sock = criar_socket();
   
-  ip = malloc(16);       /* XXX.XXX.XXX.XXX\0 */
+  /* Recupera IP */
+  ip = malloc(16);    /* XXX.XXX.XXX.XXX\0 */
   recupera_ip(host, ip);
   printf("IP: %s\n", ip);
   
+  /* Configura socket */
   configura_socket(ip, &remote);
   
+  /* Conecta */
   if (connect(sock, (struct sockaddr *)remote, sizeof(struct sockaddr)) < 0)
   {
     perror("Erro ao conectar");
     exit(1);
   }
   
+  /* Recupera o GET HTTP */
   http = recupera_http(host, pagina);
   printf("HTTP:\n%s\n", http);
   
+  /* Envia GET para o servidor */
   envia_http_servidor(sock, http);
   
   /* Recuperar pagina e grava no arquivo fp */
@@ -105,7 +78,39 @@ int main(int argc, char **argv)
   return 0;
 }
 
-int criar_socket()
+void verifica_parametros (char **argv, int argc, char *flag)
+{
+  if ((argc != 3) && (argc != 4))
+  {
+    printf("Linha de comando incorreta!\n");
+    formato_mesagem();
+    exit(1);
+  }
+  else if (argc == 4)
+  {
+    (*flag)  = argv[3][0];
+  }
+}
+
+void abre_arquivo_existente (char *arquivo, int num_param, char flag)
+{
+  if ((fp = fopen(arquivo, "rb")) != NULL)   /* Arquivo ja existe */
+  {
+    fclose(fp);
+    if ((num_param == 4) && (flag == 'T'))
+    {
+      fp = fopen(arquivo, "wb");
+    }
+    else
+    {
+      perror("Arquivo ja existe");
+      formato_mesagem();
+      exit(1);
+    }
+  }
+}
+
+int criar_socket ()
 {
   int sock;
   sock = socket(AF_INET, SOCK_STREAM, 0);
@@ -202,17 +207,17 @@ void envia_http_servidor (int sock, char *http)
   } 
 }
 
-/* Recuperar pagina e grava no arquivo fp */
 void recupera_pagina (int sock, char *pagina)
 {
   int htmlstart = 0;
   int estado = 0;
   int bytes;
-  char buffer[1];
+  char buffer[BUFFERSIZE+1];
   double tempo_gasto;
   clock_t tempo_inicial, tempo_final;
   
-  fp = fopen(pagina, "wb");
+  if (fp == NULL)
+    fp = fopen(pagina, "wb");
   
   /* Zera o buffer */
   memset(buffer, 0, sizeof(buffer));       
@@ -225,32 +230,36 @@ void recupera_pagina (int sock, char *pagina)
   {
     if (htmlstart == 0)
     {
-      if (estado == 0 && buffer[0] == '\r')
+      int index;
+      for (index = 0; index < bytes; index++)
       {
-        estado = 1;
-      }
-      else if (estado == 1 && buffer[0] == '\n')
-      {
-        estado = 2;
-      }
-      else if (estado == 2 && buffer[0] == '\r')
-      {
-        estado = 3;
-      }
-      else if (estado == 3 && buffer[0] == '\n')
-      {
-        htmlstart = 1;   
-      }
-      else
-      {
-        estado = 0;
+        if (htmlstart)
+        {
+          fwrite(buffer+1, sizeof(char), 1, fp);
+        }
+        if (htmlstart == 0)
+        {
+          if (((estado == 0 || estado == 2 ) && buffer[index] == '\r')
+              || (estado == 1 && buffer[index] == '\n'))
+          {
+            estado++;
+          }
+          else if (estado == 3 && buffer[index] == '\n')
+          {
+            htmlstart = 1;   
+          }
+          else
+          {
+            estado = 0;
+          }         
+        }
       }
     }
     else if (htmlstart == 1)
     {
-        fwrite(buffer, bytes, 1, fp);
+      fwrite(buffer, bytes, 1, fp);
     }
-    memset(buffer, 0, bytes);  
+    memset(buffer, 0, sizeof(buffer));  
   }
   
   if(bytes < 0)

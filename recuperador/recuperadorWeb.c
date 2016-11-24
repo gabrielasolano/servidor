@@ -30,8 +30,9 @@ int main (int argc, char **argv)
   char *ip;
   char *http;
   char *host;
-  char *pagina;
   char flag = 'F';
+  /* Evita comentario de uninitialized */
+  char *pagina = malloc(sizeof(char *));
   
   /* Verifica quantidade de parametros */
   verifica_parametros(argv, argc, &flag);

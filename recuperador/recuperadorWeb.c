@@ -1,3 +1,5 @@
+
+
 #include <stdio.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -9,7 +11,7 @@
     
 int criar_socket();
 char *recupera_http(char *host, char *pagina);
-void recupera_ip(char *host, char *ip);
+void recupera_ip(char *host, char *ip, int tam_ip);
 void formato_mesagem();
 void configura_socket(char *ip, struct sockaddr_in **remote);
 void envia_http_servidor(int sock, char *http);
@@ -21,52 +23,42 @@ FILE *fp;
     
 #define PORT 80
 #define USERAGENT "HTMLGET 1.0"
-#define BUFFERSIZE 0
+#define BUFFERSIZE 1024
      
 int main (int argc, char **argv)
 {
   struct sockaddr_in *remote;
   int sock;
-  char *ip;
+  char ip[16];    /* XXX.XXX.XXX.XXX\0 */
   char *http;
   char *host;
+  char *pagina;
   char flag = 'F';
-  /* Evita comentario de uninitialized */
-  char *pagina = malloc(sizeof(char *));
   
-  /* Verifica quantidade de parametros */
   verifica_parametros(argv, argc, &flag);
   
-  /* Valida abertura de arquivo existente */
   abre_arquivo_existente(argv[2], argc, flag);
   
   /* Atribuicao parametros -> variaveis */
   strtok_r(argv[1], "/", &pagina);
   host = argv[1];
 
-  /* Cria socket */
   sock = criar_socket();
   
-  /* Recupera IP */
-  ip = malloc(16);    /* XXX.XXX.XXX.XXX\0 */
-  recupera_ip(host, ip);
+  recupera_ip(host, ip, 16);
   printf("IP: %s\n", ip);
   
-  /* Configura socket */
   configura_socket(ip, &remote);
   
-  /* Conecta */
   if (connect(sock, (struct sockaddr *)remote, sizeof(struct sockaddr)) < 0)
   {
     perror("Erro ao conectar");
     exit(1);
   }
   
-  /* Recupera o GET HTTP */
   http = recupera_http(host, pagina);
   printf("HTTP:\n%s\n", http);
   
-  /* Envia GET para o servidor */
   envia_http_servidor(sock, http);
   
   /* Recuperar pagina e grava no arquivo fp */
@@ -74,8 +66,8 @@ int main (int argc, char **argv)
   
   free(http);
   free(remote);
-  free(ip);
   close(sock);
+  fclose(fp);
   return 0;
 }
 
@@ -123,11 +115,11 @@ int criar_socket ()
   return sock;
 }
 
-void recupera_ip (char *host, char *ip)
+void recupera_ip (char *host, char *ip, int tam_ip)
 {
   struct hostent *hent;
-  int tam_ip = 15;                            /* XXX.XXX.XXX.XXX */
-  memset(ip, 0, tam_ip + 1);                  /* Seta string ip com 0s */
+
+  memset(ip, 0, tam_ip);                      /* Seta string ip com 0s */
   if ((hent = gethostbyname(host)) == NULL)   /* Recupera IP a partir host */
   {
     perror("Nao foi possivel recuperar o IP");
@@ -136,7 +128,7 @@ void recupera_ip (char *host, char *ip)
   }
   
   /* Converte endereco da rede em uma string (armazena em ip) */
-  if (inet_ntop(AF_INET, (void *) hent->h_addr_list[0], ip, tam_ip) == NULL)
+  if (inet_ntop(AF_INET, (void *) hent->h_addr_list[0], ip, tam_ip-1) == NULL)
   {
     perror("Nao foi possivel converter host");
     formato_mesagem();
@@ -198,7 +190,7 @@ void envia_http_servidor (int sock, char *http)
   int bytes;
   while (enviado < tamanho_http)
   {
-    /* Retorna o numero de bytes enviado  */
+    /* Retorna o numero de bytes enviado */
     bytes = send(sock, http + enviado, tamanho_http - enviado, 0);   
     if(bytes == -1){
       perror("Erro ao enviar http");
@@ -277,3 +269,4 @@ void formato_mesagem ()
   printf("Formato: ./recuperador www.pagina.com /path/arquivo T.\n");
   printf("T: flag optativa que forca a sobrescrita do arquivo.\n");
 }
+

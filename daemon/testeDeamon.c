@@ -102,8 +102,7 @@ void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
 
 void formato_mesagem ()
 {
-  printf("Formato: ./recuperador www.pagina.com /path/arquivo T.\n");
-  printf("T: flag optativa que forca a sobrescrita do arquivo.\n");
+  printf("Formato: ./recuperador <porta> <diretorio>\n");
 }
 
 

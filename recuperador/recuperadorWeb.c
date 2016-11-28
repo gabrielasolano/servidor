@@ -122,7 +122,7 @@ void recupera_ip (char *host, char *ip, int tam_ip)
   memset(ip, 0, tam_ip);                      /* Seta string ip com 0s */
   if ((hent = gethostbyname(host)) == NULL)   /* Recupera IP a partir host */
   {
-    perror("Nao foi possivel recuperar o IP");
+    herror("Nao foi possivel recuperar o IP");
     formato_mesagem();
     exit(1);
   }

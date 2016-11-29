@@ -21,7 +21,7 @@ void verifica_parametros(char **argv, int argc, char *flag);
     
 FILE *fp;
     
-#define PORT 80
+#define PORT 2014
 #define USERAGENT "HTMLGET 1.0"
 #define BUFFERSIZE 1024
      
@@ -50,7 +50,7 @@ int main (int argc, char **argv)
   
   configura_socket(ip, &remote);
   
-  if (connect(sock, (struct sockaddr *)&remote, sizeof(struct sockaddr)) == -1)
+  if (connect(sock, (struct sockaddr *) &remote, sizeof(struct sockaddr)) == -1)
   {
     perror("Erro ao conectar");
     exit(1);
@@ -106,7 +106,7 @@ void abre_arquivo_existente (char *arquivo, int num_param, char flag)
 int criar_socket ()
 {
   int sock;
-  sock = socket(PF_INET, SOCK_STREAM, 0);
+  sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP); /*PF_INET, SOCK_STREAM, 0*/
   if (sock < 0)
   {
     perror("Socket nao criado");
@@ -172,9 +172,6 @@ void configura_socket (char *ip, struct sockaddr_in *remote)
   aux = inet_pton(AF_INET, ip, (void *) (&(remote->sin_addr.s_addr)));
   
   memset(&(remote->sin_zero), '\0', 8); /* Zera o restante da struct */
-  
-  /*(*remote)->sin_addr = *((struct in_addr *)he->h_addr);*/
-  
   
   if (aux < 0)                     
   {

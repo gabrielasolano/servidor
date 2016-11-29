@@ -36,7 +36,7 @@ int main (int argc, char **argv)
   {
     perror("socket");
     exit(1);
-  }
+  } 
   
   /* Configura o socket: INADDR_ANY (bind recupera IP maquina que roda o processo */
   cliente.sin_family = AF_INET;
@@ -49,7 +49,7 @@ int main (int argc, char **argv)
     perror("connect");
     exit(1);
   }
-  
+  //send(sockfd, "Ola", 4, 0);
   if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1)
   {
     perror("recv");

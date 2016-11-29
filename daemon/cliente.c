@@ -49,7 +49,8 @@ int main (int argc, char **argv)
     perror("connect");
     exit(1);
   }
-  //send(sockfd, "Ola", 4, 0);
+  char mensagem[] = " TESTE /path/to/file HTTP/1.0\r\n\r\n";
+  send(sockfd, mensagem, strlen(mensagem), 0);
   if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1)
   {
     perror("recv");

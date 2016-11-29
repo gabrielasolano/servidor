@@ -177,31 +177,71 @@ void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
 void responde_cliente (int sock_cliente)
 {
   int bytes;
-  char buffer[BUFFERSIZE];
-  
+  int socket_fechado = 0;
+  char buffer[BUFFERSIZE+1];
+  char *http_metodo;
+  char *http_versao;
+  char *context;
+  char *mensagem;
+  char buf_salvo[BUFFERSIZE+1];
   /* 1. Servidor recebe a mensagem do socket cliente
    * 2. Servidor responde a mensagem para o socke cliente
    * 3. Servidor fecha o socket cliente
    */
   
-  while ((bytes = recv((sock_cliente), buffer, sizeof(buffer), 0)) > 0)
+  while ((!socket_fechado) && ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0))
   {
-    printf("Entrou aqui!\nBuffer:\n%s", buffer);
-    send(sock_cliente, "Mundo", 4, 0);
-  }
-          
-  if (bytes <= 0)
-  {
-    if (bytes == 0)
+    printf("Recebeu mensagem: %s\n", buffer);
+    
+    //Salva o buffer, just in case (Se nao precisar, apagar)
+    strncpy(buf_salvo, buffer, sizeof(buffer));
+    /* Processa a mensagem
+     * Formato: GET /path/to/file HTTP/1.0
+     * Formato: GET /path/to/file HTTP/1.1
+     */
+    
+    /* Verifica se tem o GET no inicio */
+    http_metodo = strtok_r(buffer, " ", &context);
+    
+    /* Se houve o GET no inicio */
+    if (strncmp(http_metodo, "GET", 3) == 0)
     {
-      printf("Socket %d encerrou a conexao.\n", (sock_cliente));
+      printf("aux: %s\ncontext: %s\nbuffer salvo: %s\n", http_metodo, context, buf_salvo);
     }
+    
+    /* Se nao houver o GET no inicio : 400 Bad Request ou 501 Not Implemented */
     else
     {
-      perror("recv()");
+      /* Recupera a versao do protocolo HTTP : HTTP/1.0 ou HTTP/1.1 */
+      strtok_r(NULL, " ", &context);
+      http_versao = strtok_r(NULL, "\r", &context);
+      
+      /* Se houve a versao do protocolo HTTP */
+      if ((strncmp(http_versao, "HTTP/1.0", 8) == 0) || (strncmp(http_versao, "HTTP/1.1", 8) == 0))
+      {
+        mensagem = "400 Bad Request\r\n\r\n";
+      }
+      
+      /* Se nao houver a versao do protocolo HTTP */
+      else
+      {
+        mensagem = "501 Not Implemented\r\n\r\n";
+      }
+      send(sock_cliente, mensagem, strlen(mensagem), 0);
+      socket_fechado = 1;
     }
+  }
+  
+  if (bytes < 0)
+  {
+    perror("recv()");
+  }
+  else if ((bytes == 0) || (socket_fechado))
+  {
+    printf("Socket %d encerrou a conexao.\n", sock_cliente);
     close(sock_cliente);
   }
+
   
   /*struct stat st;
   char date[1024];

@@ -22,10 +22,12 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
+#include <sys/stat.h>
 
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int socket_cliente);
+int existe_pagina (char *pagina);
     
 #define MAXQUEUE 10   /* Numero maximo de conexoes que o servidor vai esperar */
 #define BUFFERSIZE BUFSIZ
@@ -61,12 +63,27 @@ int main (int argc, char **argv)
     return 1;
   }
   
+  /*if (chdir(argv[2]) < 0)
+  {
+    perror("chdir()");
+    exit(1);
+  }
+
+  getcwd(diretorio, sizeof(diretorio));
+  printf("\nStarting Server on PORT: %s and PATH: %s\n", porta, diretorio);
+  if (chroot(diretorio) < 0)
+  {
+    perror("chroot()");
+    exit(1);
+  }*/
+  
   /* Recupera e valida o diretorio */
   /*strncpy(diretorio, argv[2], strlen(argv[2]));
   if (strlen(argv[2]) < strlen(diretorio))
   {
     diretorio[strlen(argv[2])] = '\0';
   }*/
+  
   /* Muda o diretorio raiz do processo para o especificado em 'diretorio' */
   /*if (chroot(diretorio) == -1) 
   {
@@ -177,222 +194,91 @@ void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
 void responde_cliente (int sock_cliente)
 {
   int bytes;
-  int socket_fechado = 0;
+  int fecha_socket = 0;
   char buffer[BUFFERSIZE+1];
   char *http_metodo;
   char *http_versao;
+  char *pagina;
   char *context;
   char *mensagem;
   char buf_salvo[BUFFERSIZE+1];
+  
   /* 1. Servidor recebe a mensagem do socket cliente
-   * 2. Servidor responde a mensagem para o socke cliente
+   * 2. Servidor responde a mensagem para o socket cliente
    * 3. Servidor fecha o socket cliente
    */
   
-  while ((!socket_fechado) && ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0))
+  if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
   {
     printf("Recebeu mensagem: %s\n", buffer);
     
     //Salva o buffer, just in case (Se nao precisar, apagar)
     strncpy(buf_salvo, buffer, sizeof(buffer));
-    /* Processa a mensagem
-     * Formato: GET /path/to/file HTTP/1.0
-     * Formato: GET /path/to/file HTTP/1.1
-     */
     
     /* Verifica se tem o GET no inicio */
     http_metodo = strtok_r(buffer, " ", &context);
     
-    /* Se houve o GET no inicio */
+    /* Se houve o GET no inicio :  */
     if (strncmp(http_metodo, "GET", 3) == 0)
     {
-      printf("aux: %s\ncontext: %s\nbuffer salvo: %s\n", http_metodo, context, buf_salvo);
-    }
-    
-    /* Se nao houver o GET no inicio : 400 Bad Request ou 501 Not Implemented */
-    else
-    {
       /* Recupera a versao do protocolo HTTP : HTTP/1.0 ou HTTP/1.1 */
-      strtok_r(NULL, " ", &context);
+      pagina = strtok_r(NULL, " ", &context);
       http_versao = strtok_r(NULL, "\r", &context);
       
-      /* Se houve a versao do protocolo HTTP */
-      if ((strncmp(http_versao, "HTTP/1.0", 8) == 0) || (strncmp(http_versao, "HTTP/1.1", 8) == 0))
+      /* Se nao houve a versao do protocolo HTTP : request invalido */
+      if ((strncmp(http_versao, "HTTP/1.0", 8) != 0) && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
       {
-        mensagem = "400 Bad Request\r\n\r\n";
+        mensagem = "HTTP/1.0 400 Bad Request\r\n\r\n";
       }
       
-      /* Se nao houver a versao do protocolo HTTP */
+      /* Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
       else
       {
-        mensagem = "501 Not Implemented\r\n\r\n";
+        printf("http_metodo: %s\npagina: %s\nhttp_versao: %s\n", http_metodo, pagina, http_versao);
+        /* Verifica se a URI 'e valida */
+        if (existe_pagina(pagina))
+        {
+          printf("Existe pagina!\n");
+        }
+        else
+        {
+          printf("Nao existe pagina!\n");
+          mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
+        }
       }
       send(sock_cliente, mensagem, strlen(mensagem), 0);
-      socket_fechado = 1;
+      fecha_socket = 1;
+    }
+    
+    /* Se nao houver o GET no inicio : 501 Not Implemented */
+    else
+    {
+      mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
+      send(sock_cliente, mensagem, strlen(mensagem), 0);
+      fecha_socket = 1;
     }
   }
   
-  if (bytes < 0)
+  else if (bytes < 0)
   {
     perror("recv()");
   }
-  else if ((bytes == 0) || (socket_fechado))
+  else if (bytes == 0)
   {
     printf("Socket %d encerrou a conexao.\n", sock_cliente);
+  }
+  if (fecha_socket)
+  {
+    printf("Encerrada conexao com socket %d\n", sock_cliente);
     close(sock_cliente);
   }
+}
 
-  
-  /*struct stat st;
-  char date[1024];
-  char buf[BUFSIZE+1];
-  char *aux;
-  char *context;
-  char *page;
-  int tmp;
-  int headerSize = 0;
-  memset(buf, 0, sizeof(buf));
-  if (clientsContext[n].active == 0)
-  {
-    clientsContext[n].active = 1;
-    activeClients++;
-  }
-  if (clientsContext[n].msgReceived == 0)
-  {
-    if ((tmp = recv(clients[n], buf, sizeof(buf), 0)) > 0)
-    {
-      memcpy(clientsContext[n].msg + clientsContext[n].received, buf, tmp);
-      clientsContext[n].received += tmp;
-      memset(buf, 0, sizeof(buf));
-      if(strstr(clientsContext[n].msg, "\r\n\r\n") != NULL)
-      {
-        clientsContext[n].msgReceived = 1;
-      }
-      else
-      {
-        return;
-      }
-    }
-    if (tmp == 0)
-    {
-      fprintf(logfile, "Socket closed\n");
-      closeClient(n);
-      return;
-    }
-    else if (tmp < 0)
-    {
-      fprintf(logfile, "recv() error\n");
-      closeClient(n);
-      return;
-    }
-  }
-  if (clientsContext[n].writting == 0)
-  {
-    fprintf(logfile, "Message received from socket %d:\n\n%s\n", clients[n],
-          clientsContext[n].msg);
-    aux = strtok_r(clientsContext[n].msg, " ", &context);
-    if (strncmp(aux, "GET", 3) != 0)
-    {
-      aux = strtok_r(NULL, " ", &context);
-      aux = strtok_r(NULL, "\r", &context);
-      if ((strncmp(aux, "HTTP/1.0", 8) == 0) &&
-          (strncmp(aux, "HTTP/1.1", 8) == 0))
-      {
-        char not_implemented[] = "HTTP/1.0 501 Not Implemented\r\n\r\n";
-        send(clients[n], not_implemented, sizeof(not_implemented), 0);
-        closeClient(n);
-        return;
-      }
-      else
-      {
-        char bad_request[] = "HTTP/1.0 400 Bad Request\r\n\r\n";
-        send(clients[n], bad_request, sizeof(bad_request), 0);
-        closeClient(n);
-        return;
-      }
-    }
-    else
-    {
-      page = strtok_r(NULL, " ", &context);
-      aux = strtok_r(NULL, "\r", &context);
-      if ((strncmp(aux, "HTTP/1.0", 8) != 0) &&
-          (strncmp(aux, "HTTP/1.1", 8) != 0))
-      {
-        char bad_request[] = "HTTP/1.0 400 Bad Request\r\n\r\n";
-        send(clients[n], bad_request, sizeof(bad_request), 0);
-        closeClient(n);
-        return;
-      }
-      if (file_exist(page))
-      {
-        stat(page, &st);
-        clientsContext[n].toSend = st.st_size;
-        if ((clientsContext[n].fp = fopen(page,"rb")) == NULL)
-        {
-          fprintf(logfile, "fopen() error\n");
-          char not_found[] = "HTTP/1.0 404 Not Found\r\n\r\n";
-          send(clients[n], not_found, strlen(not_found), 0);
-          closeClient(n);
-          return;
-        }
-        memset(buf, '\0', sizeof(buf));
-        time_t now = time(0);
-        struct tm tm = *gmtime(&now);
-        strftime(date, sizeof(date), "%a, %d %b %Y %H:%M:%S %Z", &tm);
-        sprintf(buf, "HTTP/1.0 200 OK\nDate: %s\nConnection: "
-                     "Closed\r\n\r\n", date);
-        headerSize = strlen(buf);
-        clientsContext[n].read = fread(buf + headerSize, 1, (sizeof(buf) -
-                                       headerSize), clientsContext[n].fp);
-        tmp = send(clients[n], buf, (clientsContext[n].read + headerSize), MSG_NOSIGNAL);
-        if (tmp <= 0)
-        {
-          fprintf(logfile, "send() error\n");
-          closeClient(n);
-          return;
-        }
-        clientsContext[n].writting = 1;
-        clientsContext[n].sent += tmp;
-        memset(buf, 0, sizeof(buf));
-        fprintf(logfile, "%d bytes sent on socket %d\n", clientsContext[n].sent,
-                clients[n]);
-        if (clientsContext[n].sent >= clientsContext[n].toSend)
-        {
-          closeClient(n);
-          return;
-        }
-      }
-      else
-      {
-        fprintf(logfile, "File doesn't exist!\n\n");
-        char not_found[] = "HTTP/1.0 404 Not Found\r\n\r\n";
-        send(clients[n], not_found, strlen(not_found), 0);
-        closeClient(n);
-        return;
-      }
-    }
-  }
-  else
-  {
-    clientsContext[n].read = fread(buf, 1, sizeof(buf), clientsContext[n].fp);
-    tmp = send(clients[n], buf, (clientsContext[n].read + headerSize), MSG_NOSIGNAL);
-    if (tmp <= 0)
-    {
-      fprintf(logfile, "write() error\n");
-      closeClient(n);
-      return;
-    }
-    clientsContext[n].sent += tmp;
-    memset(buf, 0, sizeof(buf));
-    fprintf(logfile, "%d bytes sent on socket %d\n", clientsContext[n].sent,
-                clients[n]);
-    if (clientsContext[n].sent >= clientsContext[n].toSend)
-    {
-      closeClient(n);
-      return;
-    }
-  }*/
- 
+int existe_pagina (char *pagina)
+{
+  /* Verifica se a URI existe : retorna 1 se existir, e 0 se nao existir */
+  struct stat buffer;
+  return (stat(pagina, &buffer) == 0);
 }
 
 void formato_mesagem ()

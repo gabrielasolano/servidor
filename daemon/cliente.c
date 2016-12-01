@@ -49,8 +49,9 @@ int main (int argc, char **argv)
     perror("connect");
     exit(1);
   }
-  char mensagem[] = "GET /easy/http/http_footnotes.html HTTP/1.0\r\n\r\n";
-  //char mensagem[] = "GET / HTTP/1.0\r\n\r\n" > Segmentation Fault;
+  //char mensagem[] = "GET /easy/http/http_footnotes.html HTTP/1.0\r\n\r\n";
+  //char mensagem[] = "GET /upload/tvcultura/programas/programa-imagem-som.jpg HTTP/1.0\r\n\r\n";
+  char mensagem[] = "GET / HTTP/1.0\r\n\r\n"; /* Segmentation Fault;*/
   send(sockfd, mensagem, strlen(mensagem), 0);
   if ((numbytes = recv(sockfd, buf, MAXDATASIZE-1, 0)) == -1)
   {

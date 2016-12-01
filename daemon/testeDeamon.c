@@ -29,7 +29,9 @@
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int socket_cliente, char diretorio[]);
-int existe_pagina (char *pagina, char diretorio[]);
+int existe_pagina (char *caminho);
+char *recupera_caminho (char *pagina, char diretorio[]);
+char *recupera_mensagem (char *caminho);
     
 #define MAXQUEUE 10   /* Numero maximo de conexoes que o servidor vai esperar */
 #define BUFFERSIZE BUFSIZ
@@ -193,31 +195,28 @@ void responde_cliente (int sock_cliente, char diretorio[])
   char *http_metodo;
   char *http_versao;
   char *pagina;
-  char *context;
+  char *contexto;
   char *mensagem;
-  char buf_salvo[BUFFERSIZE+1];
+  char *caminho;
   
   /* 1. Servidor recebe a mensagem do socket cliente
    * 2. Servidor responde a mensagem para o socket cliente
    * 3. Servidor fecha o socket cliente
    */
-  
+  //sleep(5);
   if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
   {
     printf("Recebeu mensagem: %s\n", buffer);
     
-    //Salva o buffer, just in case (Se nao precisar, apagar)
-    strncpy(buf_salvo, buffer, sizeof(buffer));
-    
     /* Verifica se tem o GET no inicio */
-    http_metodo = strtok_r(buffer, " ", &context);
+    http_metodo = strtok_r(buffer, " ", &contexto);
     
     /* Se houve o GET no inicio :  */
     if (strncmp(http_metodo, "GET", 3) == 0)
     {
       /* Recupera a versao do protocolo HTTP : HTTP/1.0 ou HTTP/1.1 */
-      pagina = strtok_r(NULL, " ", &context);
-      http_versao = strtok_r(NULL, "\r", &context);
+      pagina = strtok_r(NULL, " ", &contexto);
+      http_versao = strtok_r(NULL, "\r", &contexto);
       
       /* Se nao houve a versao do protocolo HTTP : request invalido */
       if ((strncmp(http_versao, "HTTP/1.0", 8) != 0) && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
@@ -236,19 +235,10 @@ void responde_cliente (int sock_cliente, char diretorio[])
         
         else
         {
-          if (existe_pagina(pagina, diretorio))
+          caminho = recupera_caminho(pagina, diretorio);
+          if (existe_pagina(caminho))
           {
-            /*time_t data_hora;
-            struct tm *http_data;
-            
-            time(&data_hora);
-            http_data = gmtime(&data_hora);
-            char data_mensagem[2000];
-            strftime(data_mensagem, sizeof(data_mensagem), "%a, %d %b %Y %H:%M:%S %Z", http_data);
-            mensagem = "HTTP/1.0 200 OK\nDate: %a, %d %b %Y %H:%M:%S %Z\nConnection: close\r\n\r\n";*/
-            
-            mensagem = "HTTP/1.0 200 OK\r\n\r\n";
-            printf("pagina: %s\ndiretorio: %s\n", pagina, diretorio);
+            mensagem = recupera_mensagem(caminho);
           }
           else
           {
@@ -287,19 +277,24 @@ void responde_cliente (int sock_cliente, char diretorio[])
   }
 }
 
-int existe_pagina (char *pagina, char diretorio[])
+char *recupera_caminho (char *pagina, char diretorio[])
 {
-  char destino[2000] = {};
-  int size_strlen;
+  int tam_pagina = strlen(pagina);
+  int tam_diretorio = strlen(diretorio);
+  char *destino;
   
-  /* Recupera path absoluto da pagina */
-  size_strlen = strlen(diretorio);
-  strncpy(destino, diretorio, size_strlen);
-  
-  size_strlen = strlen(pagina);
-  strncat(destino, pagina, size_strlen);
+  destino = (char *) malloc(tam_pagina + tam_diretorio);
 
-  if (access(destino, R_OK) == 0)
+  /* Recupera path absoluto da pagina */
+  strncpy(destino, diretorio, tam_diretorio);
+  strncat(destino, pagina, tam_pagina);
+  
+  return destino;
+}
+
+int existe_pagina (char *caminho)
+{
+  if (access(caminho, R_OK) == 0)
   {
     return 1; /* Arquivo existe com permissao para sua leitura */
   }
@@ -310,4 +305,41 @@ void formato_mesagem ()
 {
   printf("Formato: ./recuperador <porta> <diretorio>\n");
   printf("Portas validas: 0 a 65535\n");
+}
+
+/* Recupera o arquivo que esta no path 'caminho' e grava em 'mensagem', junto com o cabecalho http */
+char *recupera_mensagem (char *caminho)
+{
+  char *mensagem;
+  char *buf;
+  int tam_arquivo;
+  int size_strlen;
+  struct stat st;
+  FILE *fp;
+  
+  /* Recupera o tamanho do arquivo */
+  stat(caminho, &st);
+  tam_arquivo = st.st_size;
+  
+  /* Constroi o cabecalho */
+  size_strlen = strlen("HTTP/1.0 200 OK\r\n\r\n");
+  
+  mensagem = malloc(tam_arquivo + size_strlen);
+  strncpy(mensagem, "HTTP/1.0 200 OK\r\n\r\n", size_strlen);
+  
+  /* Concatena o arquivo no cabecalho */
+  fp = fopen(caminho, "rb");
+  buf = malloc(sizeof(char *));
+  
+  while (tam_arquivo != 0)
+  {
+    fread(buf, 1, 1, fp);
+    strncat(mensagem, buf, strlen(buf));
+    tam_arquivo--;
+  }
+  
+  /* Libera memoria */
+  free(buf);
+  fclose(fp);
+  return mensagem;
 }

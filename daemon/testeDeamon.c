@@ -23,11 +23,13 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <sys/stat.h>
+#include <fcntl.h>           /* Definition of AT_* constants */
+#include <time.h>
 
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
-void responde_cliente (int socket_cliente);
-int existe_pagina (char *pagina);
+void responde_cliente (int socket_cliente, char diretorio[]);
+int existe_pagina (char *pagina, char diretorio[]);
     
 #define MAXQUEUE 10   /* Numero maximo de conexoes que o servidor vai esperar */
 #define BUFFERSIZE BUFSIZ
@@ -63,33 +65,22 @@ int main (int argc, char **argv)
     return 1;
   }
   
-  /*if (chdir(argv[2]) < 0)
+  /* Muda o diretorio do processo para argv[2] */
+  if (chdir(argv[2]) == -1)
   {
     perror("chdir()");
     exit(1);
   }
-
+  
+  /* Recupera diretorio absoluto */
   getcwd(diretorio, sizeof(diretorio));
-  printf("\nStarting Server on PORT: %s and PATH: %s\n", porta, diretorio);
-  if (chroot(diretorio) < 0)
+  if (diretorio == NULL)
   {
-    perror("chroot()");
+    perror("getcwd()");
     exit(1);
-  }*/
+  }
   
-  /* Recupera e valida o diretorio */
-  /*strncpy(diretorio, argv[2], strlen(argv[2]));
-  if (strlen(argv[2]) < strlen(diretorio))
-  {
-    diretorio[strlen(argv[2])] = '\0';
-  }*/
-  
-  /* Muda o diretorio raiz do processo para o especificado em 'diretorio' */
-  /*if (chroot(diretorio) == -1) 
-  {
-    perror("chroot()");
-    exit(1);
-  }*/
+  printf("Iniciando servidor na porta: %d e no path: %s\n", porta, diretorio); 
   
   /* socket > configura socket > bind > listen */
   inicia_servidor(&sock_servidor, &servidor, porta);
@@ -137,13 +128,15 @@ int main (int argc, char **argv)
         else
         {
           //printf("Entrou aqui\n");
-          responde_cliente(sock_cliente);
+          responde_cliente(sock_cliente, diretorio);
           FD_CLR(sock_cliente, &read_fds);
           //printf("Saiu aqui\n");
         }
       }
     }
   }
+  close(sock_servidor);
+  close(sock_cliente);
   return 0;
 }
 
@@ -189,12 +182,13 @@ void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
 
  /*!
  * Funcao para tratar o recebimento de mensagens no socket de um determinado
- * cliente n e enviar a resposta adequada.
+ * cliente e enviar a resposta adequada.
  */
-void responde_cliente (int sock_cliente)
+void responde_cliente (int sock_cliente, char diretorio[])
 {
   int bytes;
   int fecha_socket = 0;
+  int size_strlen;
   char buffer[BUFFERSIZE+1];
   char *http_metodo;
   char *http_versao;
@@ -234,29 +228,48 @@ void responde_cliente (int sock_cliente)
       /* Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
       else
       {
-        printf("http_metodo: %s\npagina: %s\nhttp_versao: %s\n", http_metodo, pagina, http_versao);
-        /* Verifica se a URI 'e valida */
-        if (existe_pagina(pagina))
+        /* Nao permite acesso fora do diretorio especificado */
+        if (pagina[0] != '/')
         {
-          printf("Existe pagina!\n");
+          mensagem = "HTTP/1.0 403 Forbidden\r\n\r\n";
         }
+        
         else
         {
-          printf("Nao existe pagina!\n");
-          mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
+          if (existe_pagina(pagina, diretorio))
+          {
+            /*time_t data_hora;
+            struct tm *http_data;
+            
+            time(&data_hora);
+            http_data = gmtime(&data_hora);
+            char data_mensagem[2000];
+            strftime(data_mensagem, sizeof(data_mensagem), "%a, %d %b %Y %H:%M:%S %Z", http_data);
+            mensagem = "HTTP/1.0 200 OK\nDate: %a, %d %b %Y %H:%M:%S %Z\nConnection: close\r\n\r\n";*/
+            
+            mensagem = "HTTP/1.0 200 OK\r\n\r\n";
+            printf("pagina: %s\ndiretorio: %s\n", pagina, diretorio);
+          }
+          else
+          {
+            mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
+          } 
         }
       }
-      send(sock_cliente, mensagem, strlen(mensagem), 0);
-      fecha_socket = 1;
     }
     
     /* Se nao houver o GET no inicio : 501 Not Implemented */
     else
     {
       mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
-      send(sock_cliente, mensagem, strlen(mensagem), 0);
-      fecha_socket = 1;
     }
+    
+    size_strlen = strlen(mensagem);
+    if (send(sock_cliente, mensagem, size_strlen, 0) == -1)
+    {
+      perror("send()");
+    }
+    fecha_socket = 1;
   }
   
   else if (bytes < 0)
@@ -274,11 +287,23 @@ void responde_cliente (int sock_cliente)
   }
 }
 
-int existe_pagina (char *pagina)
+int existe_pagina (char *pagina, char diretorio[])
 {
-  /* Verifica se a URI existe : retorna 1 se existir, e 0 se nao existir */
-  struct stat buffer;
-  return (stat(pagina, &buffer) == 0);
+  char destino[2000] = {};
+  int size_strlen;
+  
+  /* Recupera path absoluto da pagina */
+  size_strlen = strlen(diretorio);
+  strncpy(destino, diretorio, size_strlen);
+  
+  size_strlen = strlen(pagina);
+  strncat(destino, pagina, size_strlen);
+
+  if (access(destino, R_OK) == 0)
+  {
+    return 1; /* Arquivo existe com permissao para sua leitura */
+  }
+  return 0;
 }
 
 void formato_mesagem ()

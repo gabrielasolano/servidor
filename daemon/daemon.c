@@ -22,12 +22,12 @@
 #include <arpa/inet.h>
 #include <sys/wait.h>
 #include <signal.h>
-
+#include <sys/stat.h>
 
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
-    
-FILE *fp;
+void responde_cliente (int socket_cliente);
+int existe_pagina (char *pagina);
     
 #define MAXQUEUE 10   /* Numero maximo de conexoes que o servidor vai esperar */
 #define BUFFERSIZE BUFSIZ
@@ -35,166 +35,118 @@ FILE *fp;
      
 int main (int argc, char **argv)
 {
-  struct sockaddr_in servidor; /* Configuracao do socket principal */
-  struct sockaddr_in cliente;  /* Configuracao do novo socket da conexao que do cliente */
-  int sock;       /* Socket principal que faz o listen() */
-  int sock_novo;  /* Socket de novas conexoes (cliente) */
+  struct sockaddr_in servidor;
+  struct sockaddr_in cliente;
+  int sock_servidor;
+  int sock_cliente;
   int porta;
-  int size;
-  int max_fd; /* Maximum file descriptor number */
-  int num_bytes;
-  fd_set master_fd; /* Lista principal de file descriptors */
-  fd_set read_fds; /* Lista provisorio de file descriptors para o select */
-  char buffer[BUFFERSIZE]; /* Buffer pra mensagem do cliente */
-  socklen_t tam_endereco;
+  int max_fd;
+  int i;
+  fd_set read_fds;
+  char diretorio[2000];
+  socklen_t addrlen;
   
-  /* Limpa os conjuntos de FDs */
-  FD_ZERO(&master_fd);
-  FD_ZERO(&read_fds);
-  
-  /* Sao necessarios dois parametros na linha de comando 
-   * ./servidor porta diretorio
-   */
+  /* Valida quantidade de parametros de entrada */
   if (argc != 3)
   {
     printf("Quantidade incorreta de parametros.\n");
     formato_mesagem();
-    exit(1);
+    return 1;
   }
   
-  /* A porta 'e o primeiro parametro da linha de comando */
+  /* Recupera e valida a porta */
   porta = atoi(argv[1]);
+  if (porta < 0 || porta > 65535)
+  {
+    printf("Porta invalida!");
+    formato_mesagem();
+    return 1;
+  }
   
-  inicia_servidor(&sock, &servidor, porta);
+  /*if (chdir(argv[2]) < 0)
+  {
+    perror("chdir()");
+    exit(1);
+  }
+
+  getcwd(diretorio, sizeof(diretorio));
+  printf("\nStarting Server on PORT: %s and PATH: %s\n", porta, diretorio);
+  if (chroot(diretorio) < 0)
+  {
+    perror("chroot()");
+    exit(1);
+  }*/
   
-  /* Adiciona o socket do servidor na lista principal */
-  FD_SET(sock, &master_fd);
+  /* Recupera e valida o diretorio */
+  /*strncpy(diretorio, argv[2], strlen(argv[2]));
+  if (strlen(argv[2]) < strlen(diretorio))
+  {
+    diretorio[strlen(argv[2])] = '\0';
+  }*/
   
-  /* Keep track of the biggest file descriptor */
-  max_fd = sock;
+  /* Muda o diretorio raiz do processo para o especificado em 'diretorio' */
+  /*if (chroot(diretorio) == -1) 
+  {
+    perror("chroot()");
+    exit(1);
+  }*/
   
-  /* Loop principal do accept */
+  /* socket > configura socket > bind > listen */
+  inicia_servidor(&sock_servidor, &servidor, porta);
+
+  /* Configuracao inicial da lista de sockets read_fds */
+  FD_ZERO(&read_fds);
+  FD_SET(sock_servidor, &read_fds);
+  max_fd = sock_servidor;
+
+  /* Loop principal para aceitar e lidar com conexoes do cliente */
   while (1)
   {
-    read_fds = master_fd;
-    
-    /* Select: numfds, readfds, writefds, exceptfds, timeVal */
-    /* O que o select faz? */
-    if (select(max_fd+1, &read_fds, NULL, NULL, NULL) == -1)
+    /* Select retorna em read_fds os sockets que estao prontos para leitura */
+    if (select(max_fd + 1, &read_fds, NULL, NULL, NULL) == -1)
     {
       perror("select()");
       exit(1);
     }
     
-    /* Run through the existing connections looking for date to read */
-    int i;
+    /* Percorre sockets e verifica se estao na lista read_fds para serem tratados */
     for (i = 0; i <= max_fd; i++)
     {
-      /* Se existe algo para ler na lista */
+      /* Existe requisicao de leitura */
       if (FD_ISSET(i, &read_fds))
       {
-        if (i == sock)
+        /* Socket do servidor: aceita as conexoes novas */
+        if (i == sock_servidor)
         {
-          /* Handle new connections */
-          size = sizeof(struct sockaddr_in);
-          sock_novo = accept(sock, (struct sockaddr *) &cliente, &size);
-          if (sock_novo == -1)
+          addrlen = sizeof(cliente);
+          sock_cliente = accept(sock_servidor, (struct sockaddr *)&cliente, &addrlen);
+          if (sock_cliente == -1)
           {
             perror("accept()");
-            continue;
           }
           else
           {
-            FD_SET(sock_novo, &master_fd); /* Adiciona na lista master */
-            /* Keep track of the maximum */
-            if (sock_novo > max_fd)
-              max_fd = sock_novo;
-            printf("selectserver: new connection from %s on socket %d\n", inet_ntoa(cliente.sin_addr), sock_novo);
+            FD_SET(sock_cliente, &read_fds);
+            if (sock_cliente > max_fd)
+              max_fd = sock_cliente;
+            printf("Nova conexao de %s no socket %d\n", inet_ntoa(cliente.sin_addr), (sock_cliente));
           }
         }
+        
+        /* Socket dos clientes: lida com os dados dos cliente */
         else
         {
-          /* Handle data from a client */
-          num_bytes = recv(i, buffer, sizeof(buffer), 0);
-          if (num_bytes <= 0) /* Algum erro de recebimento */
-          {
-            if (num_bytes == 0)
-            {
-              printf("selectserver: socket %d hung up\n", i);
-            }
-            else
-            {
-              perror("recv()");
-            }
-            close(i);
-            FD_CLR(i, &master_fd); /* Remove da lista master */
-          }
-          else /* Recebeu mensagem do cliente */
-          {
-            int j;
-            for (j = 0; j < max_fd; j++)
-            {
-              /* Send to everyone */
-              if (FD_ISSET(j, &master_fd))
-              {
-                /* Except the listener (sock) and ourselves */
-                if (j != sock && j != i)
-                {
-                  if (send(j, buffer, num_bytes, 0) == -1)
-                    perror("send()");
-                }
-              }
-            }
-          }
+          //printf("Entrou aqui\n");
+          responde_cliente(sock_cliente);
+          FD_CLR(sock_cliente, &read_fds);
+          //printf("Saiu aqui\n");
         }
-      } 
-    }
-    
-    /* Aceita conexao do cliente */
-    
-    
-    /* Accpet bloqueia (sleep) ate receber alguma coisa */
-  /*  sock_novo = accept(sock, (struct sockaddr *) &cliente, &size);
-    if (sock_novo == -1)
-    {
-      perror("accept()");
-      continue;
-    }
-    printf("Server: got connection from %s\n", inet_ntoa(cliente.sin_addr));*/
-    
-    /* Cria o processo child */
-    /*pid = fork();
-    if (pid > 0) /* Child process criado 
-    {
-      close(sock); /* Child doesn't need the listener 
-      /* Socket do cliente manda mensagem 'Hello, world!' 
-      if (send(sock_novo, "Hello, world!\n", 14, 0) == -1)
-      {
-        perror("send()");
       }
-      close(sock_novo);
-      exit(0);
     }
-    else if (pid < 0) /* Erro na criacao do child process 
-    {
-      perror("fork()");
-      exit(1);
-    }
-    close(sock_novo); /* Parent doesn't need this */
   }
-  
-  /* Aceita conexoes : cria o novo socket do cliente */
-  /*int size = sizeof(struct sockaddr_in);
-  sock_novo = accept(sock, (struct sockaddr *) &cliente, &size);
-  if (sock_novo == -1)
-  {
-    perror("accpet()");
-    exit(1);
-  }*/
-  
-  close(sock);
   return 0;
 }
+
 
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
 {
@@ -235,9 +187,102 @@ void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
   }
 }
 
+ /*!
+ * Funcao para tratar o recebimento de mensagens no socket de um determinado
+ * cliente n e enviar a resposta adequada.
+ */
+void responde_cliente (int sock_cliente)
+{
+  int bytes;
+  int fecha_socket = 0;
+  char buffer[BUFFERSIZE+1];
+  char *http_metodo;
+  char *http_versao;
+  char *pagina;
+  char *context;
+  char *mensagem;
+  char buf_salvo[BUFFERSIZE+1];
+  
+  /* 1. Servidor recebe a mensagem do socket cliente
+   * 2. Servidor responde a mensagem para o socket cliente
+   * 3. Servidor fecha o socket cliente
+   */
+  
+  if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
+  {
+    printf("Recebeu mensagem: %s\n", buffer);
+    
+    //Salva o buffer, just in case (Se nao precisar, apagar)
+    strncpy(buf_salvo, buffer, sizeof(buffer));
+    
+    /* Verifica se tem o GET no inicio */
+    http_metodo = strtok_r(buffer, " ", &context);
+    
+    /* Se houve o GET no inicio :  */
+    if (strncmp(http_metodo, "GET", 3) == 0)
+    {
+      /* Recupera a versao do protocolo HTTP : HTTP/1.0 ou HTTP/1.1 */
+      pagina = strtok_r(NULL, " ", &context);
+      http_versao = strtok_r(NULL, "\r", &context);
+      
+      /* Se nao houve a versao do protocolo HTTP : request invalido */
+      if ((strncmp(http_versao, "HTTP/1.0", 8) != 0) && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
+      {
+        mensagem = "HTTP/1.0 400 Bad Request\r\n\r\n";
+      }
+      
+      /* Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
+      else
+      {
+        printf("http_metodo: %s\npagina: %s\nhttp_versao: %s\n", http_metodo, pagina, http_versao);
+        /* Verifica se a URI 'e valida */
+        if (existe_pagina(pagina))
+        {
+          printf("Existe pagina!\n");
+        }
+        else
+        {
+          printf("Nao existe pagina!\n");
+          mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
+        }
+      }
+      send(sock_cliente, mensagem, strlen(mensagem), 0);
+      fecha_socket = 1;
+    }
+    
+    /* Se nao houver o GET no inicio : 501 Not Implemented */
+    else
+    {
+      mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
+      send(sock_cliente, mensagem, strlen(mensagem), 0);
+      fecha_socket = 1;
+    }
+  }
+  
+  else if (bytes < 0)
+  {
+    perror("recv()");
+  }
+  else if (bytes == 0)
+  {
+    printf("Socket %d encerrou a conexao.\n", sock_cliente);
+  }
+  if (fecha_socket)
+  {
+    printf("Encerrada conexao com socket %d\n", sock_cliente);
+    close(sock_cliente);
+  }
+}
+
+int existe_pagina (char *pagina)
+{
+  /* Verifica se a URI existe : retorna 1 se existir, e 0 se nao existir */
+  struct stat buffer;
+  return (stat(pagina, &buffer) == 0);
+}
+
 void formato_mesagem ()
 {
   printf("Formato: ./recuperador <porta> <diretorio>\n");
+  printf("Portas validas: 0 a 65535\n");
 }
-
-

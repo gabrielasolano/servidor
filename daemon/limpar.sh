@@ -6,7 +6,8 @@ echo
 echo
 
 rm -rf diretorio
-rm -rf testeDeamon
+rm -rf servidor
+rm -rf cliente
 echo
 echo
 echo "Script finalizado!"

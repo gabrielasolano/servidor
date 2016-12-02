@@ -20,6 +20,8 @@ void responde_cliente (int socket_cliente, char diretorio[]);
 int existe_pagina (char *caminho);
 char *recupera_caminho (char *pagina, char diretorio[]);
 char *recupera_mensagem (char *caminho);
+void recupera_arquivo (char mensagem[], int tam_arquivo, int tam_cabecalho, char *caminho);
+void envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
     
 /* Numero maximo de conexoes que o servidor vai esperar */
 #define MAXQUEUE 10   
@@ -186,7 +188,7 @@ void responde_cliente (int sock_cliente, char diretorio[])
   char *http_versao;
   char *pagina;
   char *contexto;
-  char *mensagem;
+  char mensagem[BUFFERSIZE+1];
   char *caminho;
   
   /*sleep(5);*/
@@ -208,27 +210,48 @@ void responde_cliente (int sock_cliente, char diretorio[])
       if ((strncmp(http_versao, "HTTP/1.0", 8) != 0) 
             && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
       {
-        mensagem = "HTTP/1.0 400 Bad Request\r\n\r\n";
+        size_strlen = strlen("HTTP/1.0 400 Bad Request\r\n\r\n");        
+        strncpy(mensagem, "HTTP/1.0 400 Bad Request\r\n\r\n", size_strlen);
+        envia_cliente(sock_cliente, mensagem, size_strlen);
+        //mensagem = "HTTP/1.0 400 Bad Request\r\n\r\n";
       }
       
       /* Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
       else
       {
-        /* Nao permite acesso fora do diretorio especificado */
-        if (pagina[0] != '/')
+        /* Nao permite acesso fora do diretorio especificado : localhost/../../../dado */
+        if ((pagina[0] != '/') || (strncmp(pagina, "/..", 3) == 0))
         {
-          mensagem = "HTTP/1.0 403 Forbidden\r\n\r\n";
+          //mensagem = "HTTP/1.0 403 Forbidden\r\n\r\n";
+          size_strlen = strlen("HTTP/1.0 403 Forbidden\r\n\r\n");        
+          strncpy(mensagem, "HTTP/1.0 403 Forbidden\r\n\r\n", size_strlen);
+          envia_cliente(sock_cliente, mensagem, size_strlen);
         }
         else
         {
           caminho = recupera_caminho(pagina, diretorio);
           if (existe_pagina(caminho))
           {
-            mensagem = recupera_mensagem(caminho);
+            struct stat st;
+            int tam_arquivo;
+            
+            stat(caminho, &st);
+            tam_arquivo = st.st_size;
+            size_strlen = strlen("HTTP/1.0 200 OK\r\n\r\n");
+            
+            char mensagem2[tam_arquivo+size_strlen+1];
+            strncpy(mensagem2, "HTTP/1.0 200 OK\r\n\r\n", size_strlen);
+            
+            recupera_arquivo(mensagem2, tam_arquivo, size_strlen, caminho);
+            envia_cliente(sock_cliente, mensagem2, tam_arquivo+size_strlen);
+            //send(sock_cliente, mensagem2, tam_arquivo+size_strlen, 0);
           }
           else
           {
-            mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
+            size_strlen = strlen("HTTP/1.0 404 Not Found\r\n\r\n");        
+            strncpy(mensagem, "HTTP/1.0 404 Not Found\r\n\r\n", size_strlen);
+            envia_cliente(sock_cliente, mensagem, size_strlen);
+            //mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
           } 
         }
       }
@@ -237,14 +260,12 @@ void responde_cliente (int sock_cliente, char diretorio[])
     /* Se nao houver o GET no inicio : 501 Not Implemented */
     else
     {
-      mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
+      size_strlen = strlen("HTTP/1.0 501 Not Implemented\r\n\r\n");        
+      strncpy(mensagem, "HTTP/1.0 501 Not Implemented\r\n\r\n", size_strlen);
+      envia_cliente(sock_cliente, mensagem, size_strlen);
+      //mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
     }
     
-    size_strlen = strlen(mensagem);
-    if (send(sock_cliente, mensagem, size_strlen, 0) == -1)
-    {
-      perror("send()");
-    }
     printf("Encerrada conexao com socket %d\n", sock_cliente);
     close(sock_cliente);
   }
@@ -257,6 +278,12 @@ void responde_cliente (int sock_cliente, char diretorio[])
   {
     printf("Socket %d encerrou a conexao.\n", sock_cliente);
   }
+}
+
+void envia_cliente (int sock_cliente, char mensagem[], int size_strlen)
+{
+  if (send(sock_cliente, mensagem, size_strlen, 0) == -1)
+    perror("send()");
 }
 
 char *recupera_caminho (char *pagina, char diretorio[])
@@ -289,42 +316,23 @@ void formato_mesagem ()
   printf("Portas validas: 0 a 65535\n");
 }
 
-/* Recupera o arquivo que esta no path 'caminho' e grava
- * em retorna para a mensagem, junto com o cabecalho
- */
-
-char *recupera_mensagem (char *caminho)
+/* Recupera o arquivo para enviar ao cliente */
+void recupera_arquivo (char mensagem[], int tam_arquivo, int tam_cabecalho, char *caminho)
 {
-  char *mensagem;
-  char *buf;
-  int tam_arquivo;
-  int size_strlen;
-  struct stat st;
   FILE *fp;
+  int i, j;
+  char buf[tam_arquivo];
   
-  /* Recupera o tamanho do arquivo */
-  stat(caminho, &st);
-  tam_arquivo = st.st_size;
-  
-  /* Constroi o cabecalho */
-  size_strlen = strlen("HTTP/1.0 200 OK\r\n\r\n");
-  
-  mensagem = malloc(tam_arquivo + size_strlen);
-  strncpy(mensagem, "HTTP/1.0 200 OK\r\n\r\n", size_strlen);
-  
-  /* Concatena o arquivo no cabecalho */
   fp = fopen(caminho, "rb");
-  buf = malloc(sizeof(char *));
+  fread(buf, 1, tam_arquivo, fp);
+  fclose(fp);
   
-  while (tam_arquivo != 0)
+  j = tam_cabecalho;
+  for (i = 0; i < tam_arquivo; i++)
   {
-    fread(buf, 1, 1, fp);
-    strncat(mensagem, buf, strlen(buf));
-    tam_arquivo--;
+    mensagem[j] = buf[i];
+    j++;
   }
   
-  /* Libera memoria */
-  free(buf);
-  fclose(fp);
-  return mensagem;
+  mensagem[j] = '\0';
 }

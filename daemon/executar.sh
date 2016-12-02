@@ -10,7 +10,7 @@ echo
 echo
 
 #Recupera um aquivo BIN
-./cliente localhost/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivoBin.bin
+./cliente localhost/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivoBin.bin
 mv arquivoBin.bin diretorio/Arquivos
 echo
 echo
@@ -22,7 +22,7 @@ echo
 echo
 
 #Recupera um arquivo PDF
-./cliente localhost/ProjetoNovoDPIeIPS.pdf arquivoPdf.pdf
+./cliente localhost/Arquivos/ProjetoNovoDPIeIPS.pdf arquivoPdf.pdf
 mv arquivoPdf.pdf diretorio/Arquivos
 echo
 echo

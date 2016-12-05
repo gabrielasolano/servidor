@@ -135,7 +135,7 @@ int main (int argc, char **argv)
 }
 
 
-void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta)
+void inicia_servidor(int *sock, struct sockaddr_in *servidor, const int porta)
 {
   /* Cria socket para o servidor */
   (*sock) = socket(PF_INET, SOCK_STREAM, 0); 

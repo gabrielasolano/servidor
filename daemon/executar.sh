@@ -1,8 +1,8 @@
 #!/bin/bash
 
+make
 echo
 echo
-
 #Recupera uma pagina HTML
 ./cliente localhost/buildbot-waterfall.html pagina.html
 mv pagina.html diretorio
@@ -16,7 +16,7 @@ echo
 echo
 
 #Recupera um arquivo ISO
-./cliente localhost/CentOS-6.3-x86_64-minimal.iso arquivoIso.iso
+./cliente localhost/ISOs/CentOS-6.3-x86_64-minimal.iso arquivoIso.iso
 mv arquivoIso.iso diretorio/ISOs
 echo
 echo

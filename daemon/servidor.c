@@ -14,19 +14,18 @@
 #include <fcntl.h> 
 #include <time.h>
 
+int existe_pagina (char *caminho);
+char *recupera_mensagem (char *caminho);
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int socket_cliente, char diretorio[]);
-int existe_pagina (char *caminho);
-char *recupera_caminho (char *pagina, char diretorio[]);
-char *recupera_mensagem (char *caminho);
-void recupera_arquivo (char mensagem[], int tam_arquivo, int tam_cabecalho, char *caminho);
+void recupera_caminho (char caminho[], char *pagina, char diretorio[]);
 void envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
+void recupera_arquivo(int sock_cliente, char *caminho);
     
 /* Numero maximo de conexoes que o servidor vai esperar */
 #define MAXQUEUE 10   
 #define BUFFERSIZE BUFSIZ
-#define MAXCLIENTS 10
      
 int main (int argc, char **argv)
 {
@@ -189,9 +188,9 @@ void responde_cliente (int sock_cliente, char diretorio[])
   char *pagina;
   char *contexto;
   char mensagem[BUFFERSIZE+1];
-  char *caminho;
+  char caminho[BUFFERSIZE+1];
   
-  /*sleep(5);*/
+  sleep(5);
   if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
   {
     printf("Recebeu mensagem: %s\n", buffer);
@@ -213,46 +212,35 @@ void responde_cliente (int sock_cliente, char diretorio[])
         size_strlen = strlen("HTTP/1.0 400 Bad Request\r\n\r\n");        
         strncpy(mensagem, "HTTP/1.0 400 Bad Request\r\n\r\n", size_strlen);
         envia_cliente(sock_cliente, mensagem, size_strlen);
-        //mensagem = "HTTP/1.0 400 Bad Request\r\n\r\n";
       }
       
       /* Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
       else
       {
-        /* Nao permite acesso fora do diretorio especificado : localhost/../../../dado */
+        /* Nao permite acesso fora do diretorio especificado
+         * Exemplo : localhost/../../../dado 
+         */
         if ((pagina[0] != '/') || (strncmp(pagina, "/..", 3) == 0))
         {
-          //mensagem = "HTTP/1.0 403 Forbidden\r\n\r\n";
           size_strlen = strlen("HTTP/1.0 403 Forbidden\r\n\r\n");        
           strncpy(mensagem, "HTTP/1.0 403 Forbidden\r\n\r\n", size_strlen);
           envia_cliente(sock_cliente, mensagem, size_strlen);
         }
         else
         {
-          caminho = recupera_caminho(pagina, diretorio);
+          memset(caminho, '\0', sizeof(caminho));
+          recupera_caminho(caminho, pagina, diretorio);
           if (existe_pagina(caminho))
           {
-            struct stat st;
-            int tam_arquivo;
-            
-            stat(caminho, &st);
-            tam_arquivo = st.st_size;
-            size_strlen = strlen("HTTP/1.0 200 OK\r\n\r\n");
-            
-            char mensagem2[tam_arquivo+size_strlen+1];
-            strncpy(mensagem2, "HTTP/1.0 200 OK\r\n\r\n", size_strlen);
-            
-            recupera_arquivo(mensagem2, tam_arquivo, size_strlen, caminho);
-            envia_cliente(sock_cliente, mensagem2, tam_arquivo+size_strlen);
-            //send(sock_cliente, mensagem2, tam_arquivo+size_strlen, 0);
+            recupera_arquivo(sock_cliente, caminho);
           }
           else
           {
             size_strlen = strlen("HTTP/1.0 404 Not Found\r\n\r\n");        
             strncpy(mensagem, "HTTP/1.0 404 Not Found\r\n\r\n", size_strlen);
             envia_cliente(sock_cliente, mensagem, size_strlen);
-            //mensagem = "HTTP/1.0 404 Not Found\r\n\r\n";
-          } 
+          }
+          memset(caminho, '\0', sizeof(caminho));
         }
       }
     }
@@ -263,7 +251,6 @@ void responde_cliente (int sock_cliente, char diretorio[])
       size_strlen = strlen("HTTP/1.0 501 Not Implemented\r\n\r\n");        
       strncpy(mensagem, "HTTP/1.0 501 Not Implemented\r\n\r\n", size_strlen);
       envia_cliente(sock_cliente, mensagem, size_strlen);
-      //mensagem = "HTTP/1.0 501 Not Implemented\r\n\r\n";
     }
     
     printf("Encerrada conexao com socket %d\n", sock_cliente);
@@ -286,19 +273,13 @@ void envia_cliente (int sock_cliente, char mensagem[], int size_strlen)
     perror("send()");
 }
 
-char *recupera_caminho (char *pagina, char diretorio[])
+void recupera_caminho (char caminho[], char *pagina, char diretorio[])
 {
   int tam_pagina = strlen(pagina);
   int tam_diretorio = strlen(diretorio);
-  char *destino;
   
-  destino = (char *) malloc(tam_pagina + tam_diretorio);
-
-  /* Recupera path absoluto da pagina */
-  strncpy(destino, diretorio, tam_diretorio);
-  strncat(destino, pagina, tam_pagina);
-  
-  return destino;
+  strncpy(caminho, diretorio, tam_diretorio);
+  strncat(caminho, pagina, tam_pagina);
 }
 
 int existe_pagina (char *caminho)
@@ -316,23 +297,35 @@ void formato_mesagem ()
   printf("Portas validas: 0 a 65535\n");
 }
 
-/* Recupera o arquivo para enviar ao cliente */
-void recupera_arquivo (char mensagem[], int tam_arquivo, int tam_cabecalho, char *caminho)
+void recupera_arquivo (int sock_cliente, char *caminho)
 {
+  
   FILE *fp;
-  int i, j;
-  char buf[tam_arquivo];
+  char buf[BUFFERSIZE+1];
+  char mensagem[BUFFERSIZE+1];
+  int bytes_lidos;
+  int size_strlen;
   
-  fp = fopen(caminho, "rb");
-  fread(buf, 1, tam_arquivo, fp);
-  fclose(fp);
-  
-  j = tam_cabecalho;
-  for (i = 0; i < tam_arquivo; i++)
+  if ((fp = fopen(caminho, "rb")) == NULL)
   {
-    mensagem[j] = buf[i];
-    j++;
+    perror("fopen()");
+    size_strlen = strlen("HTTP/1.0 404 Not Found\r\n\r\n");
+    strncpy(mensagem, "HTTP/1.0 404 Not Found\r\n\r\n", size_strlen);
+    envia_cliente(sock_cliente, mensagem, size_strlen);
+    return;
+  }
+  else /* Envia o cabecalho */
+  {
+    size_strlen = strlen("HTTP/1.0 200 OK\r\n\r\n");
+    strncpy(mensagem, "HTTP/1.0 200 OK\r\n\r\n", size_strlen);
+    envia_cliente(sock_cliente, mensagem, size_strlen);
   }
   
-  mensagem[j] = '\0';
+  /* Enquanto nao tiver terminado de ler o arquivo, o envia para o cliente */
+  while ((bytes_lidos = fread(buf, 1, sizeof(buf), fp)) > 0)
+  {
+    memcpy(mensagem, buf, bytes_lidos);
+    envia_cliente(sock_cliente, mensagem, bytes_lidos);
+  }
+  fclose(fp);
 }

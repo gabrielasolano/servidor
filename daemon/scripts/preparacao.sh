@@ -1,5 +1,6 @@
 #!/bin/bash
 
+cd ..
 gcc cliente.c -o cliente
 echo
 echo

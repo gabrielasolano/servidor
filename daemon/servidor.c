@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <time.h>
 
 /* Numero maximo de conexoes que o servidor vai esperar */
@@ -39,7 +40,7 @@ void envia_buffer (int indice_cliente);
 void zera_struct_cliente (int indice_cliente);
 
 struct Monitoramento clientes_ativos[MAXCLIENTS];
-char diretorio[2000];
+char diretorio[PATH_MAX+1];
 FILE *fp = NULL;
 
 int main (int argc, char **argv)
@@ -299,16 +300,18 @@ void envia_primeiro_buffer (int indice_cliente)
         /* Nao permite acesso fora do diretorio especificado
          * Exemplo : localhost/../../../dado 
          */
-        if ((pagina[0] != '/') || (strncmp(pagina, "/..", 3) == 0))
-        {
+				recupera_caminho(indice_cliente, pagina);
+        if (strncmp(diretorio, clientes_ativos[indice_cliente].caminho, strlen(diretorio)) != 0)
+				{
 					envia_cabecalho(indice_cliente, "HTTP/1.0 403 Forbidden\r\n\r\n");
 					clientes_ativos[indice_cliente].enviar = 0;
-        }
+				}
         else
         {
-          recupera_caminho(indice_cliente, pagina);
+          //recupera_caminho(indice_cliente, pagina);
           if (existe_pagina(clientes_ativos[indice_cliente].caminho))
           {
+						printf("\n\nCaminho: %s\n\n", clientes_ativos[indice_cliente].caminho);
 						fp = fopen(clientes_ativos[indice_cliente].caminho, "rb");
 						if (fp == NULL)
 						{
@@ -366,18 +369,20 @@ void recupera_caminho (int indice, char *pagina)
 {
 	int tam_pagina = strlen(pagina);
 	int tam_diretorio = strlen(diretorio);
+	char caminho[PATH_MAX+1];
 
-	strncpy(clientes_ativos[indice].caminho, diretorio, tam_diretorio);
-	strncat(clientes_ativos[indice].caminho, pagina, tam_pagina);
+	memset(caminho, '\0', sizeof(caminho));
+	strncpy(caminho, diretorio, tam_diretorio);
+	strncat(caminho, pagina, tam_pagina);
+
+	char *ptr;
+	ptr = realpath(caminho, clientes_ativos[indice].caminho);
 }
 
 int existe_pagina (char *caminho)
 {
-  if (access(caminho, R_OK) == 0)
-  {
-    return 1; /* Arquivo existe com permissao para sua leitura */
-  }
-  return 0;
+  struct stat   buffer;   
+  return (stat (caminho, &buffer) == 0);
 }
 
 void formato_mesagem ()

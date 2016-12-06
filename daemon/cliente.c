@@ -207,9 +207,9 @@ void recupera_pagina (int sock, char *pagina)
   int htmlstart = 0;
   int estado = 0;
   int bytes;
-  char buffer[BUFFERSIZE+1];
-  double tempo_gasto;
-  clock_t tempo_inicial, tempo_final;
+  int recebido = 0;
+	char mensagem[BUFFERSIZE+1];
+	char buffer[BUFFERSIZE+1];
   
   if (fp == NULL)
     fp = fopen(pagina, "wb");
@@ -220,10 +220,16 @@ void recupera_pagina (int sock, char *pagina)
   /* Maquina de estados: ignora cabecalho inicial HTTP
    * e grava o restante no arquivo fp
    */
-  tempo_inicial = clock();
+
   while ((bytes = recv(sock, buffer, sizeof(buffer), 0)) > 0)
   {
     //printf("%s", buffer);
+		if (recebido < sizeof(mensagem))
+    {
+      memcpy(mensagem+recebido, buffer, bytes);
+      recebido += bytes;
+    }
+    
     if (htmlstart == 0)
     {
       int index;
@@ -257,14 +263,15 @@ void recupera_pagina (int sock, char *pagina)
     }
     memset(buffer, 0, sizeof(buffer));  
   }
+  if (strstr(mensagem, "200 OK") == NULL)
+  {
+    printf("%s\n", mensagem);
+  }
   
   if(bytes < 0)
   {
     perror("Erro no recebimento da mensagem");
   }
-  tempo_final = clock();
-  tempo_gasto = ((tempo_final - tempo_inicial) / CLOCKS_PER_SEC);
-  printf("Tempo decorrido: %.0f segundos\n", tempo_gasto);
 }
 
 void formato_mesagem ()

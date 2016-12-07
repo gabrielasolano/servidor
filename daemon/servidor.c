@@ -264,6 +264,7 @@ void envia_primeiro_buffer (int indice_cliente)
 {
 	int bytes;
   int sock_cliente;
+	int size_strlen;
 	char buffer[BUFFERSIZE+1];
   char *http_metodo;
   char *http_versao;
@@ -276,7 +277,7 @@ void envia_primeiro_buffer (int indice_cliente)
   if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
   {
     printf("Recebeu mensagem: %s\n", buffer);
-
+		
     /* Verifica se tem o GET no inicio */
     http_metodo = strtok_r(buffer, " ", &contexto);
 
@@ -288,7 +289,12 @@ void envia_primeiro_buffer (int indice_cliente)
       http_versao = strtok_r(NULL, "\r", &contexto);
 
 			/* Se nao houve a versao do protocolo HTTP : request invalido */
-      if ((strncmp(http_versao, "HTTP/1.0", 8) != 0)
+			if (pagina == NULL || http_versao == NULL)
+			{
+				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n");
+				clientes_ativos[indice_cliente].enviar = 0;
+			}
+      else if ((strncmp(http_versao, "HTTP/1.0", 8) != 0)
             && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
       {
 				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n");
@@ -301,7 +307,9 @@ void envia_primeiro_buffer (int indice_cliente)
          * Exemplo : localhost/../../../dado 
          */
 				recupera_caminho(indice_cliente, pagina);
-        if (strncmp(diretorio, clientes_ativos[indice_cliente].caminho, strlen(diretorio)) != 0)
+				///printf("\n\nDiretorio: %s\nCaminho: %s\n\n", diretorio, clientes_ativos[indice_cliente].caminho);
+				size_strlen = strlen(diretorio);
+        if (strncmp(diretorio, clientes_ativos[indice_cliente].caminho, size_strlen * sizeof(char)) != 0)
 				{
 					envia_cabecalho(indice_cliente, "HTTP/1.0 403 Forbidden\r\n\r\n");
 					clientes_ativos[indice_cliente].enviar = 0;
@@ -311,7 +319,7 @@ void envia_primeiro_buffer (int indice_cliente)
           //recupera_caminho(indice_cliente, pagina);
           if (existe_pagina(clientes_ativos[indice_cliente].caminho))
           {
-						printf("\n\nCaminho: %s\n\n", clientes_ativos[indice_cliente].caminho);
+						//printf("\n\nCaminho: %s\n\n", clientes_ativos[indice_cliente].caminho);
 						fp = fopen(clientes_ativos[indice_cliente].caminho, "rb");
 						if (fp == NULL)
 						{
@@ -373,10 +381,10 @@ void recupera_caminho (int indice, char *pagina)
 
 	memset(caminho, '\0', sizeof(caminho));
 	strncpy(caminho, diretorio, tam_diretorio);
+	strncat(caminho, "/", sizeof(char));
 	strncat(caminho, pagina, tam_pagina);
 
-	char *ptr;
-	ptr = realpath(caminho, clientes_ativos[indice].caminho);
+	realpath(caminho, clientes_ativos[indice].caminho);
 }
 
 int existe_pagina (char *caminho)

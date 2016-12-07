@@ -216,7 +216,7 @@ void recupera_pagina (int sock, char *pagina)
   
   /* Zera o buffer */
   memset(buffer, 0, sizeof(buffer));       
-  
+  memset(mensagem, '\0', sizeof(mensagem));
   /* Maquina de estados: ignora cabecalho inicial HTTP
    * e grava o restante no arquivo fp
    */
@@ -224,11 +224,11 @@ void recupera_pagina (int sock, char *pagina)
   while ((bytes = recv(sock, buffer, sizeof(buffer), 0)) > 0)
   {
     //printf("%s", buffer);
-		if (recebido < sizeof(mensagem))
-    {
-      memcpy(mensagem+recebido, buffer, bytes);
-      recebido += bytes;
-    }
+		//if (recebido < sizeof(mensagem))
+    //{
+      //memcpy(mensagem+recebido, buffer, bytes);
+      //recebido += bytes;
+    //}
     
     if (htmlstart == 0)
     {
@@ -241,6 +241,8 @@ void recupera_pagina (int sock, char *pagina)
         }
         if (htmlstart == 0)
         {
+					memcpy(mensagem+recebido, buffer+index, 1);
+					recebido++;
           if (((estado == 0 || estado == 2 ) && buffer[index] == '\r')
               || (estado == 1 && buffer[index] == '\n'))
           {
@@ -265,8 +267,9 @@ void recupera_pagina (int sock, char *pagina)
   }
   if (strstr(mensagem, "200 OK") == NULL)
   {
+		remove(pagina);
     printf("%s\n", mensagem);
-  }
+  }//else{printf("%s\n", mensagem);}
   
   if(bytes < 0)
   {

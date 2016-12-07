@@ -1,43 +1,33 @@
 #!/bin/bash
-
 # Esse script 'e apenas para facilitar a visualizacao dos testes que eu fiz.
 # Ele nao deve ser executado.
 
-cd ..
-make
-# Em um terminal : ./servidor 1096 diretorio
-echo
-echo
+#Volta para a pasta 'deamon' e compila o servidor e o cliente
+#cd ..
+#make
+#gcc cliente.c -o cliente
+#./servidor 1096 diretorio &
 
-#Recupera uma pagina HTML (em outro terminal)
-./cliente localhost/buildbot-waterfall.html pagina.html
-mv pagina.html diretorio
-echo
-echo
+#Baixa 10 arquivos de cada
+for i in {1..10}; do
+  wget localhost:8080/buildbot-waterfall.html -O pagina_${i}.html &
+done
 
-#Recupera um aquivo BIN (em outro terminal)
-./cliente localhost/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin arquivoBin.bin
-mv arquivoBin.bin diretorio/Arquivos
-echo
-echo
+for i in {1..10}; do
+	wget localhost:8080/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin -O arquivoBin_${i}.bin &
+done
 
-#Recupera um arquivo ISO (em outro terminal)
-./cliente localhost/ISOs/CentOS-6.3-x86_64-minimal.iso arquivoIso.iso
-mv arquivoIso.iso diretorio/ISOs
-echo
-echo
+for i in {1..10}; do
+	wget localhost:8080/ISOs/CentOS-6.3-x86_64-minimal.iso -O arquivoIso_${i}.iso &
+done
 
-#Recupera um arquivo PDF (em outro terminal)
-./cliente localhost/Arquivos/ProjetoNovoDPIeIPS.pdf arquivoPdf.pdf
-mv arquivoPdf.pdf diretorio/Arquivos
-echo
-echo
+for i in {1..10}; do
+	wget localhost:8080/Arquivos/ProjetoNovoDPIeIPS.pdf -O arquivoPdf_${i}.pdf &
+done
 
-#Recupera um arquivo JPG
-./cliente localhost/upload/tvcultura/programas/programa-imagem-som.jpg imagem.jpg
-mv imagem.jpg diretorio/upload/tvcultura/programas
-echo
-echo
+for i in {1..10}; do
+	wget localhost:8080/upload/tvcultura/programas/programa-imagem-som.jpg -O imagem_${i}.jpg &
+done
 
 echo "Script finalizado!"
 echo "Para remover os arquivos criado execute o script limpar.sh"

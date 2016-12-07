@@ -1,23 +1,46 @@
 #!/bin/bash
+#Move todos os novos arquivos para uma nova pasta 'arquivos'
+mkdir -p arquivos/html
+mkdir -p arquivos/bin
+mkdir -p arquivos/iso
+mkdir -p arquivos/pdf
+mkdir -p arquivos/jpg
 
-# Esse script 'e apenas para facilitar a visualizacao dos testes que eu fiz.
-# Ele nao deve ser executado.
+mv pagina_*.html arquivos/html/
+mv imagem_*.jpg arquivos/jpg/
+mv arquivoPdf_*.pdf arquivos/pdf/
+mv arquivoIso_*.iso arquivos/iso/
+mv arquivoBin_*.bin arquivos/bin/
 
-cd ..
+#Verifica os arquivos novos
 echo
 echo
-
-#Recupera uma pagina HTML (em outro terminal)
-md5sum pagina.html diretorio/buildbot-waterfall.html
-echo
-md5sum arquivoBin.bin diretorio/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin
-echo
-md5sum arquivoIso.iso diretorio/ISOs/CentOS-6.3-x86_64-minimal.iso
-echo
-md5sum arquivoPdf.pdf diretorio/Arquivos/ProjetoNovoDPIeIPS.pdf
-echo
-md5sum imagem.jpg diretorio/upload/tvcultura/programas/programa-imagem-som.jpg
+md5sum ../diretorio/buildbot-waterfall.html
+for i in {1..10}; do
+	md5sum arquivos/html/pagina_${i}.html
+done
 echo
 
-echo "Script finalizado!"
-echo "Para remover os arquivos criado execute o script limpar.sh"
+md5sum ../diretorio/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin
+for i in {1..10}; do
+	md5sum arquivos/bin/arquivoBin_${i}.bin
+done
+echo
+
+md5sum ../diretorio/ISOs/CentOS-6.3-x86_64-minimal.iso 
+for i in {1..10}; do
+	md5sum arquivos/iso/arquivoIso_${i}.iso
+done
+echo
+
+md5sum ../diretorio/Arquivos/ProjetoNovoDPIeIPS.pdf 
+for i in {1..10}; do
+	md5sum arquivos/pdf/arquivoPdf_${i}.pdf
+done
+echo
+
+md5sum ../diretorio/upload/tvcultura/programas/programa-imagem-som.jpg 
+for i in {1..10}; do
+	md5sum arquivos/jpg/imagem_${i}.jpg
+done
+echo

@@ -3,7 +3,7 @@
  * \brief Servidor single-thread interoperando com clientes ativos.
  * \date 08/12/2016
  * \author Gabriela Solano <gabriela.solano@aker.com.br>
- * 
+ *
  */
 
 #include <stdio.h>
@@ -33,8 +33,11 @@ typedef struct Monitoramento
 {
 	int sock;
 	int enviar;
+	int recebeu_cabecalho;
+	int tam_cabecalho;
 	unsigned long bytes_enviados;
 	char caminho[BUFFERSIZE+1];
+	char cabecalho[BUFFERSIZE+1];
 } monitoramento;
 
 int existe_pagina (char *caminho);
@@ -237,7 +240,7 @@ void encerra_cliente (int indice_cliente)
 /*!
  * \brief Atribui valores default para cliente presente no array de clientes
  * ativos. Posicoes zeradas no array sao considerados clientes inativos.
- * \param[in] indice_cliente Posicao do array de clientes ativos que sera 
+ * \param[in] indice_cliente Posicao do array de clientes ativos que sera
  * modificada.
  */
 void zera_struct_cliente (int indice_cliente)
@@ -245,7 +248,10 @@ void zera_struct_cliente (int indice_cliente)
 	clientes_ativos[indice_cliente].sock = -1;
 	clientes_ativos[indice_cliente].enviar = 0;
 	clientes_ativos[indice_cliente].bytes_enviados = 0;
+	clientes_ativos[indice_cliente].recebeu_cabecalho = 0;
+	clientes_ativos[indice_cliente].tam_cabecalho = 0;
 	memset(clientes_ativos[indice_cliente].caminho, '\0', BUFFERSIZE+1);
+	memset(clientes_ativos[indice_cliente].cabecalho, '\0', BUFFERSIZE+1);
 }
 
 /*!
@@ -326,7 +332,7 @@ void responde_cliente (int indice_cliente)
  */
 void envia_primeiro_buffer (int indice_cliente)
 {
-	int bytes;
+	int bytes = 0;
   int sock_cliente;
 	int size_strlen;
 	char buffer[BUFFERSIZE+1];
@@ -337,8 +343,40 @@ void envia_primeiro_buffer (int indice_cliente)
 
 	sock_cliente = clientes_ativos[indice_cliente].sock;
 	memset(buffer, '\0', sizeof(buffer));
-  if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
+
+	if (clientes_ativos[indice_cliente].recebeu_cabecalho == 0)
+	{
+		if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
+		{
+			memcpy(clientes_ativos[indice_cliente].cabecalho +
+							clientes_ativos[indice_cliente].tam_cabecalho, buffer, bytes);
+			clientes_ativos[indice_cliente].tam_cabecalho += bytes;
+			memset(buffer, 0, sizeof(buffer));
+
+			if (strstr(clientes_ativos[indice_cliente].cabecalho, "\r\n\r\n")!= NULL)
+			{
+				clientes_ativos[indice_cliente].recebeu_cabecalho = 1;
+			}
+			else
+			{
+				return;
+			}
+		}
+		if (bytes < 0)
+		{
+			perror("recv()");
+			encerra_cliente (indice_cliente);
+		}
+		else if (bytes == 0)
+		{
+			printf("Socket %d encerrou a conexao.\n", sock_cliente);
+			encerra_cliente (indice_cliente);
+		}
+  }
+	else
   {
+		size_strlen = strlen(clientes_ativos[indice_cliente].cabecalho);
+		strncpy(buffer, clientes_ativos[indice_cliente].cabecalho, size_strlen);
     printf("Recebeu mensagem: %s\n", buffer);
 
     /*! Verifica se tem o GET no inicio */
@@ -410,16 +448,6 @@ void envia_primeiro_buffer (int indice_cliente)
 											"HTTP/1.0 501 Not Implemented\r\n\r\n", 1);
     }
   }
-  else if (bytes < 0)
-  {
-    perror("recv()");
-		encerra_cliente (indice_cliente);
-  }
-  else if (bytes == 0)
-  {
-    printf("Socket %d encerrou a conexao.\n", sock_cliente);
-		encerra_cliente (indice_cliente);
-  }
 }
 
 /*!
@@ -447,7 +475,7 @@ int envia_cliente (int indice_cliente, char mensagem[], int size_strlen)
 
 /*!
  * \brief Recupera o path do arquivo requisitado pelo cliente.
- * \param[in] indice Indice do array de clientes ativos que identica qual 
+ * \param[in] indice Indice do array de clientes ativos que identica qual
  * cliente esta sendo processado.
  * \param[in] pagina Arquivo requisitado pelo cliente.
  */
@@ -468,7 +496,7 @@ void recupera_caminho (int indice, char *pagina)
 /*!
  * \brief Valida a existencia do arquivo requisitado pelo usuario.
  * \param[in] caminho Path do arquivo requisitado.
- * \return 1 caso o arquivo exista no caminho determinado. 
+ * \return 1 caso o arquivo exista no caminho determinado.
  * \return 0 caso o arquivo nao exista no caminho determinado.
  */
 int existe_pagina (char *caminho)

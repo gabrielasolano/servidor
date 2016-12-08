@@ -36,6 +36,7 @@ cd ..
 mkdir -p ISOs
 cd ISOs
 wget http://lovelace.aker.com.br/ISOs/CentOS-6.3-x86_64-minimal.iso
+wget http://lovelace.aker.com.br/ISOs/Fedora-18-i386-DVD.iso
 echo
 echo
 

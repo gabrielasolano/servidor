@@ -1,7 +1,7 @@
 /*!
  * \file servidor.c
  * \brief Servidor single-thread interoperando com clientes ativos.
- * \date 07/12/2016
+ * \date 08/12/2016
  * \author Gabriela Solano <gabriela.solano@aker.com.br>
  * 
  */
@@ -23,7 +23,6 @@
 #include <limits.h>
 #include <time.h>
 
-#define MAXQUEUE 100
 #define BUFFERSIZE BUFSIZ
 #define MAXCLIENTS 100
 
@@ -39,27 +38,29 @@ typedef struct Monitoramento
 } monitoramento;
 
 int existe_pagina (char *caminho);
+int envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
+int envia_cabecalho (int indice_cliente, char cabecalho[], int flag_erro);
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int indice_cliente);
 void recupera_caminho (int indice_cliente, char *pagina);
-int envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
 void envia_primeiro_buffer (int indice_cliente);
-void envia_cabecalho (int indice_cliente, char cabecalho[]);
 void envia_buffer (int indice_cliente);
 void zera_struct_cliente (int indice_cliente);
-void encerra_cliente (int indice_cliente, fd_set *read_fds);
+void encerra_cliente (int indice_cliente);
 
 struct Monitoramento clientes_ativos[MAXCLIENTS];
 char diretorio[PATH_MAX+1];
+int excluir_ativos = 0;
+fd_set read_fds;
 FILE *fp = NULL;
 
 /*!
  * \brief Funcao principal que conecta o servidor e processa
  * requisicoes de clientes.
- * \param[in] argc Quantidade e parametros de entrada
- * \param[in] argv[1] Porta de conexao do servidor
- * \param[in] argv[2] Diretorio utilizado como root pelo servidor
+ * \param[in] argc Quantidade e parametros de entrada.
+ * \param[in] argv[1] Porta de conexao do servidor.
+ * \param[in] argv[2] Diretorio utilizado como root pelo servidor.
  */
 int main (int argc, char **argv)
 {
@@ -67,7 +68,6 @@ int main (int argc, char **argv)
   struct sockaddr_in cliente;
 	struct timeval t_espera;
   socklen_t addrlen;
-  fd_set read_fds;
   int sock_servidor;
   int sock_cliente;
   int porta;
@@ -75,7 +75,6 @@ int main (int argc, char **argv)
   int i;
 	int ativos = 0;
 	int pedido_cliente;
-	int excluir_ativos = 0;
 
   /*! Valida quantidade de parametros de entrada */
   if (argc != 3)
@@ -119,7 +118,7 @@ int main (int argc, char **argv)
 	{
 		zera_struct_cliente(i);
 	}
-	t_espera.tv_sec = 1;																															/* Diminuir o tempo de espera */
+	t_espera.tv_sec = 1;
 	t_espera.tv_usec = 0;
 
   /*! Loop principal para aceitar e lidar com conexoes do cliente */
@@ -136,6 +135,7 @@ int main (int argc, char **argv)
     }
     else
     {
+			printf("\nEspera de cliente.\n");
       pedido_cliente = select(max_fd + 1, &read_fds, NULL, NULL, NULL);
     }
 		/*! Validacao do select */
@@ -150,14 +150,14 @@ int main (int argc, char **argv)
 		{
 			if (clientes_ativos[i].sock != -1)
 			{
-				FD_SET(clientes_ativos[i].sock, &read_fds);																	/* Coloquei if dentro de if para tentar */
-				if (clientes_ativos[i].sock > max_fd)																				/* diminuir o tempo de execucao */
+				FD_SET(clientes_ativos[i].sock, &read_fds);
+				if (clientes_ativos[i].sock > max_fd)
 					max_fd = clientes_ativos[i].sock;
 			}
 		}
 
 		/*! Aceita novas conexoes */
-		if ((pedido_cliente > 0) && FD_ISSET(sock_servidor, &read_fds)									/* Alterei a ordem para otimizar */
+		if ((pedido_cliente > 0) && FD_ISSET(sock_servidor, &read_fds)
 					&& (ativos < MAXCLIENTS))
 		{
 			addrlen = sizeof(cliente);
@@ -190,29 +190,25 @@ int main (int argc, char **argv)
 
 		/*! Trata as conexoes ativas */
 		excluir_ativos = 0;
-		for (i = 0; i < ativos; i++)
+		for (i = 0; i < MAXCLIENTS; i++)
 		{
 			/*! Verifica se esta esperando para leitura */
 			if (FD_ISSET(clientes_ativos[i].sock, &read_fds))
 			{
 				/*! Se o cliente ja terminou sua leitura */
-				if (clientes_ativos[i].enviar == 0)
-				{
-					encerra_cliente(i, &read_fds);
-					//FD_CLR(clientes_ativos[i].sock, &read_fds);
-					//printf("Encerrada conexao com socket %d\n", clientes_ativos[i].sock);
-					//close(clientes_ativos[i].sock);
-					//zera_struct_cliente(i);
-					excluir_ativos++;
+				if ((clientes_ativos[i].sock != -1)
+								&& (clientes_ativos[i].enviar == 0))
+					{
+					encerra_cliente(i);
 				}
 				/*! Se o cliente ainda nao terminou a leitura */
 				else
 				{
 					responde_cliente(i);
-					if (clientes_ativos[i].enviar == 0)
+					if ((clientes_ativos[i].sock != -1)
+								&& (clientes_ativos[i].enviar == 0))
 					{
-						encerra_cliente(i, &read_fds);
-						excluir_ativos++;
+						encerra_cliente(i);
 					}
 				}
 			}
@@ -224,18 +220,18 @@ int main (int argc, char **argv)
 }
 
 /*!
- * \brief Encerra conexao com determinado cliente
+ * \brief Encerra conexao com determinado cliente.
  * \param[in] indice_cliente Posicao do array de clientes ativos que determina
- * quem sera processado
- * \param[in] read_fds Ponteiro para a lista de sockets 'to read'
+ * quem sera processado.
  */
-void encerra_cliente (int indice_cliente, fd_set *read_fds)
+void encerra_cliente (int indice_cliente)
 {
-	FD_CLR(clientes_ativos[indice_cliente].sock, &(*read_fds));
-	printf("Encerrada conexao com socket %d\n", 
-				 clientes_ativos[indice_cliente].sock);
+	FD_CLR(clientes_ativos[indice_cliente].sock, &read_fds);
+	printf("Encerrada conexao com socket %d\n",
+					clientes_ativos[indice_cliente].sock);
 	close(clientes_ativos[indice_cliente].sock);
 	zera_struct_cliente(indice_cliente);
+	excluir_ativos++;
 }
 
 /*!
@@ -294,8 +290,8 @@ void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta)
     exit(1);
   }
 
-  /*! Espera conexoes : maximo de MAXQUEUE */
-  if (listen((*sock), MAXQUEUE) == -1)
+  /*! Espera conexoes : maximo de MAXCLIENTS */
+  if (listen((*sock), MAXCLIENTS) == -1)
   {
     perror("listen()");
     exit(1);
@@ -328,7 +324,7 @@ void responde_cliente (int indice_cliente)
  * \param[in] indice_cliente Indice no array de clientes ativos que determina
  * qual cliente esta sendo processado.
  */
-void envia_primeiro_buffer (int indice_cliente)																		/* Tentar otimizar essa funcao! */
+void envia_primeiro_buffer (int indice_cliente)
 {
 	int bytes;
   int sock_cliente;
@@ -341,7 +337,6 @@ void envia_primeiro_buffer (int indice_cliente)																		/* Tentar otimi
 
 	sock_cliente = clientes_ativos[indice_cliente].sock;
 	memset(buffer, '\0', sizeof(buffer));
-	//sleep(5);																																			/* Comentei o sleep para acelerar a execucao */
   if ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0)
   {
     printf("Recebeu mensagem: %s\n", buffer);
@@ -359,28 +354,25 @@ void envia_primeiro_buffer (int indice_cliente)																		/* Tentar otimi
 			/*! Se nao houve a versao do protocolo HTTP : request invalido */
 			if (pagina == NULL || http_versao == NULL)
 			{
-				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n");
+				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n", 1);
 				clientes_ativos[indice_cliente].enviar = 0;
 			}
       else if ((strncmp(http_versao, "HTTP/1.0", 8) != 0)
             && (strncmp(http_versao, "HTTP/1.1", 8) != 0))
       {
-				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n");
+				envia_cabecalho(indice_cliente, "HTTP/1.0 400 Bad Request\r\n\r\n", 1);
 				clientes_ativos[indice_cliente].enviar = 0;
       }
       /*! Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
       else
       {
-        /*! Nao permite acesso fora do diretorio especificado
-         * Exemplo : localhost/../../../dado
-         */
+        /*! Nao permite acesso fora do diretorio especificado */
 				recupera_caminho(indice_cliente, pagina);
 				size_strlen = strlen(diretorio);
         if (strncmp(diretorio, clientes_ativos[indice_cliente].caminho,
 						size_strlen * sizeof(char)) != 0)
 				{
-					envia_cabecalho(indice_cliente, "HTTP/1.0 403 Forbidden\r\n\r\n");
-					clientes_ativos[indice_cliente].enviar = 0;
+					envia_cabecalho(indice_cliente, "HTTP/1.0 403 Forbidden\r\n\r\n", 1);
 				}
         else
         {
@@ -391,20 +383,22 @@ void envia_primeiro_buffer (int indice_cliente)																		/* Tentar otimi
 						{
 							perror("fopen()");
 							envia_cabecalho(indice_cliente,
-															"HTTP/1.0 404 Not Found\r\n\r\n");
-							clientes_ativos[indice_cliente].enviar = 0;
+															"HTTP/1.0 404 Not Found\r\n\r\n", 1);
 						}
 						else
 						{
 							fclose(fp);
-							envia_cabecalho(indice_cliente, "HTTP/1.0 200 OK\r\n\r\n");
-							envia_buffer(indice_cliente);
+							if (envia_cabecalho(indice_cliente, "HTTP/1.0 200 OK\r\n\r\n", 0)
+									== 0)
+							{
+								envia_buffer(indice_cliente);
+							}
 						}
           }
           else
           {
-						envia_cabecalho(indice_cliente, "HTTP/1.0 404 Not Found\r\n\r\n");
-						clientes_ativos[indice_cliente].enviar = 0;
+						envia_cabecalho(indice_cliente,
+														"HTTP/1.0 404 Not Found\r\n\r\n", 1);
           }
         }
       }
@@ -412,43 +406,41 @@ void envia_primeiro_buffer (int indice_cliente)																		/* Tentar otimi
     /*! Se nao houver o GET no inicio : 501 Not Implemented */
     else
     {
-			envia_cabecalho(indice_cliente, "HTTP/1.0 501 Not Implemented\r\n\r\n");
-			clientes_ativos[indice_cliente].enviar = 0;
+			envia_cabecalho(indice_cliente,
+											"HTTP/1.0 501 Not Implemented\r\n\r\n", 1);
     }
   }
   else if (bytes < 0)
   {
     perror("recv()");
+		encerra_cliente (indice_cliente);
   }
   else if (bytes == 0)
   {
     printf("Socket %d encerrou a conexao.\n", sock_cliente);
-		zera_struct_cliente(indice_cliente);
+		encerra_cliente (indice_cliente);
   }
 }
 
 /*!
- * \brief Envia ao cliente uma mensagem.
- * \param[in] sock_cliente Identificador do socket do cliente que recebera a
- * mensagem.
+ * \brief Envia ao cliente uma mensagem. Trata SIGPIPE.
+ * \param[in] indice_cliente Indice do array de clientes ativos que identica
+ * qual cliente esta sendo processado.
  * \param[in] mensagem Mensagem a ser enviada para o cliente.
  * \param[in] size_strlen Tamanho da mensagem a ser enviada.
- * \return Retorna a quantidade de bytes enviados para o cliente.
+ * \return Quantidade de bytes enviados para o cliente, caso de envio correto.
+ * \return -1 em caso de erro no envio.
  */
-int envia_cliente (int sock_cliente, char mensagem[], int size_strlen)					/* Implementar o caso que o cliente fecha a conexao */
+int envia_cliente (int indice_cliente, char mensagem[], int size_strlen)
 {
 	int enviado;
-	enviado = send(sock_cliente, mensagem, size_strlen, 0);
-	if (enviado == EPIPE)
-	{
-		printf("Socket %d encerrou a conexao.\n", sock_cliente);
-		/*! Tratar */
-		zera_struct_cliente(indice_cliente);
-	}
-  else if (enviado == -1)
+	enviado = send(clientes_ativos[indice_cliente].sock, mensagem, size_strlen,
+								 MSG_NOSIGNAL);
+	if (enviado <= 0)
 	{
     perror("send()");
-		exit(1);
+		encerra_cliente (indice_cliente);
+		return -1;
 	}
 	return enviado;
 }
@@ -476,8 +468,8 @@ void recupera_caminho (int indice, char *pagina)
 /*!
  * \brief Valida a existencia do arquivo requisitado pelo usuario.
  * \param[in] caminho Path do arquivo requisitado.
- * \return Retorna 1 caso o arquivo exista no caminho determinado. Retorna 0
- * caso contrario.
+ * \return 1 caso o arquivo exista no caminho determinado. 
+ * \return 0 caso o arquivo nao exista no caminho determinado.
  */
 int existe_pagina (char *caminho)
 {
@@ -499,12 +491,26 @@ void formato_mesagem ()
  * \param[in] indice_cliente Indice do array de clientes ativos que identifica
  * qual cliente esta sendo processado.
  * \param[in] cabecalho Cabecalho HTTP a ser enviado.
+ * \param[in] flag_erro Flag que indica se o cabecalho contem mensagem de erro
+ * HTTP.
+ * \return -1 em caso de erro de envio.
+ * \return 0 em caso de envio correto.
  */
-void envia_cabecalho (int indice_cliente, char cabecalho[])
+int envia_cabecalho (int indice_cliente, char cabecalho[], int flag_erro)
 {
 	int size_strlen;
+	int temp;
 	size_strlen = strlen(cabecalho);
-	envia_cliente(clientes_ativos[indice_cliente].sock, cabecalho, size_strlen);
+	temp = envia_cliente(indice_cliente, cabecalho, size_strlen);
+	if (temp == -1)
+	{
+		return -1;
+	}
+	if (flag_erro)
+	{
+		clientes_ativos[indice_cliente].enviar = 0;
+	}
+	return 0;
 }
 
 /*!
@@ -517,14 +523,12 @@ void envia_buffer (int indice_cliente)
 {
   char buf[BUFFERSIZE+1];
   unsigned int bytes_lidos = 0;
-  int sock_cliente;
 	unsigned long pular_buf = 0;
-
+	int temp = 0;
 	/*! Zera o buffer que vai receber o arquivo */
 	memset(buf, '\0', sizeof(buf));
 
 	/*! Inicia variaveis locais para melhorar leitura do codigo */
-	sock_cliente = clientes_ativos[indice_cliente].sock;
 	pular_buf = clientes_ativos[indice_cliente].bytes_enviados;
 
 	/*! Abre o arquivo */
@@ -543,13 +547,23 @@ void envia_buffer (int indice_cliente)
 	/*! O que leu foi menor que o tamanho do buffer, logo o arquivo acabou */
 	if ((bytes_lidos > 0) && (bytes_lidos < sizeof(buf)))
 	{
-		envia_cliente(sock_cliente, buf, bytes_lidos);
+		temp = envia_cliente(indice_cliente, buf, bytes_lidos);
+		if (temp == -1)
+		{
+			fclose(fp);
+			return;
+		}
 		clientes_ativos[indice_cliente].enviar = 0;
 	}
 	else if (bytes_lidos == sizeof(buf))
 	{
 		/*! Leu um buffer inteiro, pode ser que exista mais coisa no arquivo */
-		int temp = envia_cliente(sock_cliente, buf, bytes_lidos);
+		temp = envia_cliente(indice_cliente, buf, bytes_lidos);
+		if (temp == -1)
+		{
+			fclose(fp);
+			return;
+		}
 		clientes_ativos[indice_cliente].bytes_enviados += temp;
 	}
 	else

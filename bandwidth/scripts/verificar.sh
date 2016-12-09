@@ -34,7 +34,7 @@ for i in {1..10}; do
 done
 echo
 
-md5sum ../diratorio/ISOs/Fedora-18-i386-DVD.iso
+md5sum ../diretorio/ISOs/Fedora-18-i386-DVD.iso
 for i in {1..10}; do
 	md5sum arquivos/iso/fedora/fedora_${i}.iso
 done

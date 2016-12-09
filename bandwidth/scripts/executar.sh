@@ -14,7 +14,7 @@ for i in {1..50}; do
 	wget localhost:8080/ISOs/CentOS-6.3-x86_64-minimal.iso -O centOS_${i}.iso &
 done
 
-#for i in {1..50}; do
+#for i in {1..15}; do
 #	wget localhost:8080/ISOs/Fedora-18-i386-DVD.iso -O fedora_${i}.iso &
 #done
 

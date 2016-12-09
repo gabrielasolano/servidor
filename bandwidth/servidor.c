@@ -1,6 +1,7 @@
 /*!
  * \file servidor.c
- * \brief Servidor single-thread interoperando com clientes ativos.
+ * \brief Servidor single-thread interoperando com clientes ativos, com
+ * controle de velocidade.
  * \date 08/12/2016
  * \author Gabriela Solano <gabriela.solano@aker.com.br>
  *
@@ -35,6 +36,7 @@ typedef struct Monitoramento
 	int enviar;
 	int recebeu_cabecalho;
 	int tam_cabecalho;
+	unsigned long bytes_por_envio;
 	unsigned long bytes_enviados;
 	char caminho[BUFFERSIZE+1];
 	char cabecalho[BUFFERSIZE+1];
@@ -43,6 +45,7 @@ typedef struct Monitoramento
 int existe_pagina (char *caminho);
 int envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
 int envia_cabecalho (int indice_cliente, char cabecalho[], int flag_erro);
+void verifica_banda (int banda_maxima, int indice_cliente);
 void formato_mesagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int indice_cliente);
@@ -57,6 +60,8 @@ char diretorio[PATH_MAX+1];
 int excluir_ativos = 0;
 fd_set read_fds;
 FILE *fp = NULL;
+struct timeval t_janela = {0};
+struct timeval timeout = {0};
 
 /*!
  * \brief Funcao principal que conecta o servidor e processa
@@ -64,23 +69,25 @@ FILE *fp = NULL;
  * \param[in] argc Quantidade e parametros de entrada.
  * \param[in] argv[1] Porta de conexao do servidor.
  * \param[in] argv[2] Diretorio utilizado como root pelo servidor.
+ * \param[in] argv[3] Taxa de envio maxima (bytes/segundo) : optativo.
  */
 int main (int argc, char **argv)
 {
   struct sockaddr_in servidor;
   struct sockaddr_in cliente;
-	struct timeval t_espera;
+	//struct timeval t_espera;
   socklen_t addrlen;
   int sock_servidor;
   int sock_cliente;
   int porta;
+	long banda_maxima;
   int max_fd;
   int i;
 	int ativos = 0;
 	int pedido_cliente;
 
   /*! Valida quantidade de parametros de entrada */
-  if (argc != 3)
+  if (argc < 3 || argc > 4)
   {
     printf("Quantidade incorreta de parametros.\n");
     formato_mesagem();
@@ -91,10 +98,23 @@ int main (int argc, char **argv)
   porta = atoi(argv[1]);
   if (porta < 0 || porta > 65535)
   {
-    printf("Porta invalida!");
+    printf("Porta invalida!\n");
     formato_mesagem();
     return 1;
   }
+
+  /* Recupera a banda_maxima maxima */
+	banda_maxima = 0;
+	if (argc == 4)
+	{
+		banda_maxima = atol(argv[3]);
+		if (banda_maxima < 0)
+		{
+			printf("Taxa de envio invalida!\n");
+			formato_mesagem();
+			return 1;			
+		}
+	}
 
   /*! Muda o diretorio do processo para o informado na linha de comando */
   if (chdir(argv[2]) == -1)
@@ -121,8 +141,8 @@ int main (int argc, char **argv)
 	{
 		zera_struct_cliente(i);
 	}
-	t_espera.tv_sec = 1;
-	t_espera.tv_usec = 0;
+	//t_espera.tv_sec = 1;
+	//t_espera.tv_usec = 0;
 
   /*! Loop principal para aceitar e lidar com conexoes do cliente */
   while (1)
@@ -134,7 +154,8 @@ int main (int argc, char **argv)
     /*! Recebe uma nova conexao */
 		if (ativos > 0) /*! Se houve alguma ativa, limita o tempo de espera */
     {
-      pedido_cliente = select(max_fd + 1, &read_fds, NULL, NULL, &t_espera);
+			//printf("\n\nTimeout: %d\n\n", (int) timeout.tv_usec);
+      pedido_cliente = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
     }
     else
     {
@@ -176,6 +197,7 @@ int main (int argc, char **argv)
 				clientes_ativos[ativos].sock = sock_cliente;
 				clientes_ativos[ativos].enviar = 1;
 				clientes_ativos[ativos].bytes_enviados = 0;
+				clientes_ativos[ativos].bytes_por_envio = 0;
 
 				/*! Controle da quantidade de clientes ativos */
 				ativos++;
@@ -201,13 +223,14 @@ int main (int argc, char **argv)
 				/*! Se o cliente ja terminou sua leitura */
 				if ((clientes_ativos[i].sock != -1)
 								&& (clientes_ativos[i].enviar == 0))
-					{
+				{
 					encerra_cliente(i);
 				}
 				/*! Se o cliente ainda nao terminou a leitura */
 				else
 				{
 					responde_cliente(i);
+					verifica_banda(banda_maxima, i);
 					if ((clientes_ativos[i].sock != -1)
 								&& (clientes_ativos[i].enviar == 0))
 					{
@@ -220,6 +243,47 @@ int main (int argc, char **argv)
   }
   close(sock_servidor);
   return 0;
+}
+
+void verifica_banda(int banda_maxima, int indice_cliente)
+{
+	struct timeval t_atual;
+	int t_cliente; /* Em usegundo (microssegundo) */
+
+	if (banda_maxima > 0)
+	{
+		gettimeofday(&t_atual, NULL);
+		
+		/* Calcula tempo cliente */	
+		struct timeval t_aux;
+		timersub(&t_atual, &t_janela, &t_aux);
+		t_cliente = (t_aux.tv_sec * 1000000) + t_aux.tv_usec;
+		//printf("Segundos: %d\nMicrossegundos: %d\n", segundo, usegundo);
+		
+		/* Cliente enviou em menos de 1 segundo */
+		if (t_cliente < 1000000)
+		{
+			/* Cliente enviou o maximo de bytes possiveis? */
+			if (clientes_ativos[indice_cliente].bytes_por_envio > (unsigned long) banda_maxima)
+			{
+				/* Seta o time out que vai ter que esperar */
+				/* Tempo de espera: 1.000.000 - usegundos */
+				timeout.tv_sec = 0;
+				timeout.tv_usec = 1000000 - t_aux.tv_usec;
+
+				/* Reseta a quantidade de bytes_por_envio do cliente */
+				clientes_ativos[indice_cliente].bytes_por_envio = 0;
+			}
+		}
+		/* Cliente enviou em mais de 1 segundo */
+		else
+		{
+			/* Reseta a contagem */
+			timerclear(&timeout);
+			timerclear(&t_janela);
+			clientes_ativos[indice_cliente].bytes_por_envio = 0;
+		}
+	}
 }
 
 /*!
@@ -248,6 +312,7 @@ void zera_struct_cliente (int indice_cliente)
 	clientes_ativos[indice_cliente].sock = -1;
 	clientes_ativos[indice_cliente].enviar = 0;
 	clientes_ativos[indice_cliente].bytes_enviados = 0;
+	clientes_ativos[indice_cliente].bytes_por_envio = 0;
 	clientes_ativos[indice_cliente].recebeu_cabecalho = 0;
 	clientes_ativos[indice_cliente].tam_cabecalho = 0;
 	memset(clientes_ativos[indice_cliente].caminho, '\0', BUFFERSIZE+1);
@@ -462,6 +527,13 @@ void envia_primeiro_buffer (int indice_cliente)
 int envia_cliente (int indice_cliente, char mensagem[], int size_strlen)
 {
 	int enviado;
+
+	/* Se o tempo de envio nao estiver setado */
+	//if (timerisset(&t_janela) == 0)
+	//{
+		gettimeofday(&t_janela, NULL);
+	//}
+	
 	enviado = send(clientes_ativos[indice_cliente].sock, mensagem, size_strlen,
 								 MSG_NOSIGNAL);
 	if (enviado <= 0)
@@ -510,8 +582,10 @@ int existe_pagina (char *caminho)
  */
 void formato_mesagem ()
 {
-  printf("Formato: ./recuperador <porta> <diretorio>\n");
+  printf("Formato 1: ./servidor <porta> <diretorio> <velocidade>\n");
+	printf("Formato 2: ./servidor <porta> <diretorio>\n");
   printf("Portas validas: 0 a 65535\n");
+	printf("Velocidades validas: >= 0");
 }
 
 /*!
@@ -593,6 +667,7 @@ void envia_buffer (int indice_cliente)
 			return;
 		}
 		clientes_ativos[indice_cliente].bytes_enviados += temp;
+		clientes_ativos[indice_cliente].bytes_por_envio += temp;
 	}
 	else
 	{

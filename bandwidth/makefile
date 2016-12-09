@@ -8,11 +8,11 @@ else
 CFLAGS += -O2
 endif
 
-programa: servidor_bandwidth.o
-	gcc servidor_bandwidth.o -o servidor_bandwidth
+programa: servidor.o
+	gcc servidor.o -o servidor
 
-servidor_bandwidth.o : servidor_bandwidth.c
-	gcc -c $(CFLAGS) servidor_bandwidth.c
+servidor.o : servidor.c
+	gcc -c $(CFLAGS) servidor.c
 
 clean: 
 	rm *.o

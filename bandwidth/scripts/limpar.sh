@@ -9,8 +9,7 @@ rm -rf arquivos
 #Arquivos da pasta 'deamon'
 cd ..
 rm -rf diretorio
-rm -rf servidor
-#rm -rf cliente
+rm -rf servidor_bandwidth
 echo
 echo
 echo "Script finalizado!"

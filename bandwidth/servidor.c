@@ -75,7 +75,6 @@ int main (int argc, char **argv)
 {
   struct sockaddr_in servidor;
   struct sockaddr_in cliente;
-	//struct timeval t_espera;
   socklen_t addrlen;
   int sock_servidor;
   int sock_cliente;
@@ -112,7 +111,7 @@ int main (int argc, char **argv)
 		{
 			printf("Taxa de envio invalida!\n");
 			formato_mesagem();
-			return 1;			
+			return 1;
 		}
 	}
 
@@ -141,8 +140,6 @@ int main (int argc, char **argv)
 	{
 		zera_struct_cliente(i);
 	}
-	//t_espera.tv_sec = 1;
-	//t_espera.tv_usec = 0;
 
   /*! Loop principal para aceitar e lidar com conexoes do cliente */
   while (1)
@@ -154,7 +151,6 @@ int main (int argc, char **argv)
     /*! Recebe uma nova conexao */
 		if (ativos > 0) /*! Se houve alguma ativa, limita o tempo de espera */
     {
-			//printf("\n\nTimeout: %d\n\n", (int) timeout.tv_usec);
       pedido_cliente = select(max_fd + 1, &read_fds, NULL, NULL, &timeout);
     }
     else
@@ -245,40 +241,48 @@ int main (int argc, char **argv)
   return 0;
 }
 
+/*!
+ * \brief Verifica o tempo que o cliente deve esperar para nao
+ * ultrapassar a banda maxima.
+ * \param[in] banda_maxima Banda maxima que o servidor pode enviar por segundo.
+ * \param[in] indice_cliente Posicao do array de clientes ativos que determina
+ * quem sera processado.
+ */
 void verifica_banda(int banda_maxima, int indice_cliente)
 {
 	struct timeval t_atual;
-	int t_cliente; /* Em usegundo (microssegundo) */
+	int t_cliente;
 
 	if (banda_maxima > 0)
 	{
 		gettimeofday(&t_atual, NULL);
-		
-		/* Calcula tempo cliente */	
+
+		/*! Calcula o tempo levado para enviar o buffer ao cliente
+		 *  (em microssegundos)
+		 */
 		struct timeval t_aux;
 		timersub(&t_atual, &t_janela, &t_aux);
 		t_cliente = (t_aux.tv_sec * 1000000) + t_aux.tv_usec;
-		//printf("Segundos: %d\nMicrossegundos: %d\n", segundo, usegundo);
-		
-		/* Cliente enviou em menos de 1 segundo */
+
+		/*! Buffer enviado em menos de 1 segundo */
 		if (t_cliente < 1000000)
 		{
-			/* Cliente enviou o maximo de bytes possiveis? */
-			if (clientes_ativos[indice_cliente].bytes_por_envio > (unsigned long) banda_maxima)
+			/*! Buffer enviado continha o maximo de bytes possiveis */
+			if (clientes_ativos[indice_cliente].bytes_por_envio >
+						(unsigned long) banda_maxima)
 			{
-				/* Seta o time out que vai ter que esperar */
-				/* Tempo de espera: 1.000.000 - usegundos */
+				/*! Seta o time out para esse cliente */
 				timeout.tv_sec = 0;
 				timeout.tv_usec = 1000000 - t_aux.tv_usec;
 
-				/* Reseta a quantidade de bytes_por_envio do cliente */
+				/*! Reseta a quantidade de bytes_por_envio do cliente */
 				clientes_ativos[indice_cliente].bytes_por_envio = 0;
 			}
 		}
-		/* Cliente enviou em mais de 1 segundo */
+		/*! Buffer enviado em mais de 1 segundo */
 		else
 		{
-			/* Reseta a contagem */
+			/*! Reseta a contagem */
 			timerclear(&timeout);
 			timerclear(&t_janela);
 			clientes_ativos[indice_cliente].bytes_por_envio = 0;
@@ -353,7 +357,7 @@ void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta)
   (*servidor).sin_addr.s_addr = htonl(INADDR_ANY);
   memset(&((*servidor).sin_zero), '\0', 8);
 
-	/*! Conecta */
+	/*! Servidor setado para receber conexoes */
   if (bind((*sock), (struct sockaddr *) &(*servidor), sizeof(struct sockaddr))
         == -1)
   {
@@ -528,12 +532,12 @@ int envia_cliente (int indice_cliente, char mensagem[], int size_strlen)
 {
 	int enviado;
 
-	/* Se o tempo de envio nao estiver setado */
-	//if (timerisset(&t_janela) == 0)
-	//{
+	/*! Se o tempo de envio da iteracao nao estiver setado */
+	if (timerisset(&t_janela) == 0)
+	{
 		gettimeofday(&t_janela, NULL);
-	//}
-	
+	}
+
 	enviado = send(clientes_ativos[indice_cliente].sock, mensagem, size_strlen,
 								 MSG_NOSIGNAL);
 	if (enviado <= 0)

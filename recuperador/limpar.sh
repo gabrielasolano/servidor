@@ -1,5 +1,5 @@
 #!/bin/bash
-cd ..
+
 echo
 echo "Removendo arquivos criados pelo script.sh"
 echo

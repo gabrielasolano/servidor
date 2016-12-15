@@ -15,7 +15,7 @@ echo
 #Recupera uma pagina HTML
 echo "HTML"
 echo
-#wget http://lovelace.aker.com.br/buildbot-waterfall.html
+wget http://lovelace.aker.com.br/buildbot-waterfall.html
 echo
 echo
 
@@ -24,7 +24,7 @@ echo "bin"
 echo
 mkdir Arquivos
 cd Arquivos
-#wget http://lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin
+wget http://lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin
 echo
 echo
 
@@ -43,7 +43,7 @@ echo
 echo "PDF"
 echo
 cd ../Arquivos
-#wget http://lovelace.aker.com.br/Arquivos/ProjetoNovoDPIeIPS.pdf
+wget http://lovelace.aker.com.br/Arquivos/ProjetoNovoDPIeIPS.pdf
 echo "Arquivo PDF criado"
 echo
 echo
@@ -54,7 +54,7 @@ echo
 cd ..
 mkdir -p upload/tvcultura/programas
 cd upload/tvcultura/programas
-#wget http://tvcultura.com.br/upload/tvcultura/programas/programa-imagem-som.jpg
+wget http://tvcultura.com.br/upload/tvcultura/programas/programa-imagem-som.jpg
 echo "Arquivo JPG criado"
 echo
 echo

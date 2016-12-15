@@ -18,7 +18,7 @@ done
 #	wget localhost:8080/ISOs/Fedora-18-i386-DVD.iso -O fedora_${i}.iso &
 #done
 
-#for i in {1..50}; do
+#for i in {1..15}; do
 #	wget localhost:8080/Arquivos/ProjetoNovoDPIeIPS.pdf -O arquivoPdf_${i}.pdf &
 #done
 

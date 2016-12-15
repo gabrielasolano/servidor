@@ -7,7 +7,6 @@ echo
 echo
 wget http://lovelace.aker.com.br/Arquivos/openwrt-ramips-mt7620-zbt-we826-squashfs-sysupgrade.bin
 echo
-cd ..
 echo
 wget http://lovelace.aker.com.br/ISOs/CentOS-6.3-x86_64-minimal.iso
 echo

@@ -1,4 +1,4 @@
-all: programa clean
+all: programa limpa
 
 CFLAGS = -Wall -Wextra
 
@@ -14,5 +14,5 @@ programa: recuperadorWeb.o
 recuperadorWeb.o : recuperadorWeb.c
 	gcc -c $(CFLAGS) recuperadorWeb.c
 
-clean: 
+limpa: 
 	rm *.o

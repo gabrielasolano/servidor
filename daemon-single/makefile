@@ -14,5 +14,5 @@ programa: servidor.o
 servidor.o : servidor.c
 	gcc -c $(CFLAGS) servidor.c
 
-clean: 
+clean:
 	rm *.o

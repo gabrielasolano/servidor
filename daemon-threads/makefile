@@ -3,7 +3,7 @@ all: programa clean
 CFLAGS = -Wall -Wextra
 
 ifdef DEBUG
-CFLAGS += -ggdb3 -g
+CFLAGS += -ggdb3
 else
 CFLAGS += -O2
 endif

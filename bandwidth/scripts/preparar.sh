@@ -47,16 +47,6 @@ wget http://lovelace.aker.com.br/Arquivos/ProjetoNovoDPIeIPS.pdf
 echo "Arquivo PDF criado"
 echo
 echo
-
-#Recupera um arquivo JPG
-echo "JPG"
-echo
-cd ..
-mkdir -p upload/tvcultura/programas
-cd upload/tvcultura/programas
-wget http://tvcultura.com.br/upload/tvcultura/programas/programa-imagem-som.jpg
-echo "Arquivo JPG criado"
-echo
 echo
 echo "Script finalizado!"
 echo "Para remover os arquivos criado execute o script limpar.sh"

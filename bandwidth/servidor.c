@@ -2,7 +2,7 @@
  * \file servidor.c
  * \brief Servidor single-thread interoperando com clientes ativos, com
  * controle de velocidade.
- * \date 08/12/2016
+ * \date 15/12/2016
  * \author Gabriela Solano <gabriela.solano@aker.com.br>
  *
  */
@@ -38,6 +38,7 @@ typedef struct Monitoramento
 	int tam_cabecalho;
 	unsigned long bytes_por_envio;
 	unsigned long bytes_enviados;
+	unsigned long pode_enviar; /*! Bytes para enviar sem estourar a banda */
 	char caminho[PATH_MAX+1];
 	char cabecalho[BUFFERSIZE+1];
 } monitoramento;
@@ -45,7 +46,7 @@ typedef struct Monitoramento
 int existe_pagina (char *caminho);
 int envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
 int envia_cabecalho (int indice_cliente, char cabecalho[], int flag_erro);
-void verifica_banda (int indice_cliente);
+void verifica_banda (int indice_cliente, int ativos);
 void formato_mensagem();
 void inicia_servidor(int *sock, struct sockaddr_in *servidor, int porta);
 void responde_cliente (int indice_cliente);
@@ -60,7 +61,7 @@ char diretorio[PATH_MAX+1];
 int excluir_ativos = 0;
 int controle_velocidade;
 long banda_maxima;
-fd_set read_fds, error_fds;
+fd_set read_fds;
 FILE *fp = NULL;
 struct timeval t_janela;
 struct timeval timeout;
@@ -110,7 +111,7 @@ int main (int argc, char **argv)
 	{
 		controle_velocidade = 1;
 		banda_maxima = atol(argv[3]);
-		if (banda_maxima < 0)
+		if (banda_maxima <= 0)
 		{
 			printf("Taxa de envio invalida!\n");
 			formato_mensagem();
@@ -146,7 +147,7 @@ int main (int argc, char **argv)
 
 	timerclear(&t_janela);
 	timerclear(&timeout);
-	
+
   /*! Loop principal para aceitar e lidar com conexoes do cliente */
   while (1)
   {
@@ -187,7 +188,6 @@ int main (int argc, char **argv)
 					&& (ativos < MAXCLIENTS))
 		{
 			addrlen = sizeof(cliente);
-			//printf("\n\nSOCKET ACEITO: %d\n\n");
 			sock_cliente = accept(sock_servidor, (struct sockaddr *) &cliente,
 														&addrlen);
 			if (sock_cliente == -1)
@@ -243,7 +243,7 @@ int main (int argc, char **argv)
 							encerra_cliente(i);
 						}
 						if (controle_velocidade && clientes_ativos[i].sock != -1)
-							verifica_banda(i);
+							verifica_banda(i, ativos);
 					}
 				}
 			}
@@ -259,8 +259,10 @@ int main (int argc, char **argv)
  * ultrapassar a banda maxima.
  * \param[in] indice_cliente Posicao do array de clientes ativos que determina
  * quem sera processado.
+ * \param[in] ativos Quantidade de clientes ativos, para otimizar o servidor
+ * em caso de um unico cliente.
  */
-void verifica_banda(int indice_cliente)
+void verifica_banda(int indice_cliente, int ativos)
 {
 	struct timeval t_atual;
 
@@ -290,6 +292,20 @@ void verifica_banda(int indice_cliente)
 
 				/*! Reseta a quantidade de bytes_por_envio do cliente */
 				clientes_ativos[indice_cliente].bytes_por_envio = 0;
+				clientes_ativos[indice_cliente].pode_enviar = 0;
+			}
+			else
+			{
+				/*! Ainda pode mandar mais bytes, sem estourar a banda maxima */
+				if (ativos == 1)
+				{
+					int temp;
+					temp = banda_maxima - clientes_ativos[indice_cliente].bytes_por_envio;
+					if ((temp > 0) && (temp < (BUFFERSIZE+1)))
+					{
+						clientes_ativos[indice_cliente].pode_enviar = temp;
+					}
+				}
 			}
 		}
 		/*! Buffer enviado em mais de 1 segundo */
@@ -299,6 +315,7 @@ void verifica_banda(int indice_cliente)
 			timerclear(&timeout);
 			timerclear(&t_janela);
 			clientes_ativos[indice_cliente].bytes_por_envio = 0;
+			clientes_ativos[indice_cliente].pode_enviar = 0;
 		}
 	}
 }
@@ -330,6 +347,7 @@ void zera_struct_cliente (int indice_cliente)
 	clientes_ativos[indice_cliente].enviar = 0;
 	clientes_ativos[indice_cliente].bytes_enviados = 0;
 	clientes_ativos[indice_cliente].bytes_por_envio = 0;
+	clientes_ativos[indice_cliente].pode_enviar = 0;
 	clientes_ativos[indice_cliente].recebeu_cabecalho = 0;
 	clientes_ativos[indice_cliente].tam_cabecalho = 0;
 	memset(clientes_ativos[indice_cliente].caminho, '\0', BUFFERSIZE+1);
@@ -606,7 +624,7 @@ void formato_mensagem ()
   printf("Formato 1: ./servidor <porta> <diretorio> <velocidade>\n");
 	printf("Formato 2: ./servidor <porta> <diretorio>\n");
   printf("Portas validas: 0 a 65535\n");
-	printf("Velocidades validas: >= 0");
+	printf("Velocidades validas: maiores que 0\n");
 }
 
 /*!
@@ -644,12 +662,36 @@ int envia_cabecalho (int indice_cliente, char cabecalho[], int flag_erro)
  */
 void envia_buffer (int indice_cliente)
 {
-  char buf[BUFFERSIZE+1];
+	char *buf = NULL;
   unsigned int bytes_lidos = 0;
 	unsigned long pular_buf = 0;
 	int temp = 0;
-	/*! Zera o buffer que vai receber o arquivo */
-	memset(buf, '\0', sizeof(buf));
+	size_t tam_alocar = 0;
+
+	if (controle_velocidade)
+	{
+		if (banda_maxima < (BUFFERSIZE+1))
+		{
+			tam_alocar = banda_maxima;
+		}
+		else
+		{
+			if (clientes_ativos[indice_cliente].pode_enviar != 0)
+			{
+				tam_alocar = clientes_ativos[indice_cliente].pode_enviar;
+				clientes_ativos[indice_cliente].pode_enviar = 0;
+			}
+			else
+			{
+				tam_alocar = BUFFERSIZE+1;
+			}
+		}
+	}
+	else
+	{
+		tam_alocar = BUFFERSIZE+1;
+	}
+	buf = malloc(sizeof(char) * tam_alocar);
 
 	/*! Inicia variaveis locais para melhorar leitura do codigo */
 	pular_buf = clientes_ativos[indice_cliente].bytes_enviados;
@@ -661,58 +703,30 @@ void envia_buffer (int indice_cliente)
 	if (fseek(fp, pular_buf, SEEK_SET) != 0)
 	{
 		perror("fseek()");
+		free(buf);
 		exit(1);
 	}
 
 	/*! Leitura de um buffer do arquivo */
-	bytes_lidos = fread(buf, 1, sizeof(buf), fp);
+	bytes_lidos = fread(buf, 1, tam_alocar, fp);
 
 	if (bytes_lidos > 0)
 	{
-		/*! Terminou de ler o arquivo */
-		/*if ((controle_velocidade && bytes_lidos == banda_maxima)
-				|| (controle_velocidade == 0 && bytes_lidos < sizeof(buf)))
+		temp = envia_cliente(indice_cliente, buf, bytes_lidos);
+		if (temp == -1)
 		{
-			temp = envia_cliente(indice_cliente, buf, bytes_lidos);
-			if (temp == -1)
-			{
-				fclose(fp);
-				return;
-			}
-			clientes_ativos[indice_cliente].enviar = 0;
-		}*/
-		/* Leu menos que a banda (controle de velocidade) ou um buffer (sem controle) */
-		if ((controle_velocidade && bytes_lidos <= banda_maxima)
-							|| (controle_velocidade == 0 && bytes_lidos <= sizeof(buf)))
-		{
-			temp = envia_cliente(indice_cliente, buf, bytes_lidos);
-			if (temp == -1)
-			{
-				fclose(fp);
-				return;
-			}
-			clientes_ativos[indice_cliente].bytes_enviados += temp;
-			clientes_ativos[indice_cliente].bytes_por_envio += temp;
+			fclose(fp);
+			free(buf);
+			return;
 		}
-		/* Leu mais que a banda, envia apenas a banda */
-		else if (controle_velocidade && bytes_lidos > banda_maxima)
-		{
-			int banda_int = banda_maxima;
-			temp = envia_cliente(indice_cliente, buf, banda_int);
-			if (temp == -1)
-			{
-				fclose(fp);
-				return;
-			}
-			clientes_ativos[indice_cliente].bytes_enviados += temp;
-			clientes_ativos[indice_cliente].bytes_por_envio += temp;
-		}
+		clientes_ativos[indice_cliente].bytes_enviados += temp;
+		clientes_ativos[indice_cliente].bytes_por_envio += temp;
 	}
 	else
 	{
 		clientes_ativos[indice_cliente].enviar = 0;
 	}
 
-	memset(buf, '\0', sizeof(buf));
+	free(buf);
 	fclose(fp);
 }

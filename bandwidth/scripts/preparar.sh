@@ -47,6 +47,5 @@ wget http://lovelace.aker.com.br/Arquivos/ProjetoNovoDPIeIPS.pdf
 echo "Arquivo PDF criado"
 echo
 echo
-echo
 echo "Script finalizado!"
 echo "Para remover os arquivos criado execute o script limpar.sh"

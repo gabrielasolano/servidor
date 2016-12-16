@@ -147,13 +147,13 @@ int main (int argc, char **argv)
 
 	timerclear(&t_janela);
 	timerclear(&timeout);
+	max_fd = sock_servidor;
 
   /*! Loop principal para aceitar e lidar com conexoes do cliente */
   while (1)
   {
 		FD_ZERO(&read_fds);
 		FD_SET(sock_servidor, &read_fds);
-		max_fd = sock_servidor;
 
     /*! Recebe uma nova conexao */
 		if (ativos > 0) /*! Se houve alguma ativa, limita o tempo de espera */

@@ -4,7 +4,7 @@ echo
 echo "Removendo arquivos criados pelo executar.sh"
 echo
 echo
-rm -rf arquivos
+rm -rf arquivo
 
 #Arquivos da pasta 'deamon'
 cd ..

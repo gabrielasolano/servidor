@@ -1,11 +1,12 @@
 #!/bin/bash
 #Move todos os novos arquivos para uma nova pasta 'arquivos'
 mkdir -p arquivo
-mv imagem*.iso arquivos/
+mv pagina*.html arquivo/
 
-md5sum ../diretorio/ISOs/CentOS-6.3-x86_64-minimal.iso
-for i in {1..10}; do
-	md5sum arquivos/imagem${i}.iso
+cd arquivo/
+md5sum ../../diretorio/buildbot-waterfall.html
+for i in {1..100}; do
+	md5sum pagina${i}.html
 done
 
 

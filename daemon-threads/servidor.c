@@ -12,7 +12,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
-
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
@@ -490,6 +489,7 @@ void verifica_banda(int indice_cliente, int ativos)
 void envia_primeiro_buffer (int indice_cliente)
 {
 	int bytes = 0;
+	int inserir = 0;
   int sock_cliente;
 	int size_strlen;
 	char buffer[BUFFERSIZE+1];
@@ -570,11 +570,37 @@ void envia_primeiro_buffer (int indice_cliente)
 		/*! Se houve o GET no inicio :  */
     if (strncmp(http_metodo, "GET", 3) == 0)
     {
+			/*! Verifica se o arquivo pode ser utilizado */
+			inserir = arquivo_pode_utilizar(indice_cliente, 0);
+			if (inserir == -1)
+			{
+				envia_cabecalho(indice_cliente,
+												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
+				return;
+			}
+			else if (inserir == 0)
+			{
+				/*! Insere na lista de arquivos utilizados */
+				insere_lista_arquivos(indice_cliente, 0);
+			}
 			cabecalho_get(indice_cliente);
 		}
 		/*! Se houve o PUT no inicio :  */
 		else if (strncmp(http_metodo, "PUT", 3) == 0)
 		{
+			/*! Verifica se o arquivo pode ser utilizado */
+			inserir = arquivo_pode_utilizar(indice_cliente, 1);
+			if (inserir == -1)
+			{
+				envia_cabecalho(indice_cliente,
+												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
+				return;
+			}
+			else if (inserir == 0)
+			{
+				/*! Insere na lista de arquivos utilizados */
+				insere_lista_arquivos(indice_cliente, 1);
+			}
 			cabecalho_put(indice_cliente);
 		}
     /*! Se nao houver o GET nem PUT no inicio : 501 Not Implemented */
@@ -659,21 +685,10 @@ void cabecalho_get (int indice_cliente)
 		else
 		{
 			fclose(fp);
-			/*! Verifica se o arquivo pode ser utilizado */
-			if (!arquivo_pode_utilizar(indice_cliente, 0))
-			{
-				envia_cabecalho(indice_cliente,
-												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
-			}
-			else
-			{
-				/*! Insere na lista de arquivos utilizados */
-				insere_lista_arquivos(indice_cliente, 0);
-				if (envia_cabecalho(indice_cliente, "HTTP/1.0 200 OK\r\n\r\n", 0)
+			if (envia_cabecalho(indice_cliente, "HTTP/1.0 200 OK\r\n\r\n", 0)
 						== 0)
-				{
-					envia_buffer_get(indice_cliente);
-				}
+			{
+				envia_buffer_get(indice_cliente);
 			}
 		}
 	}
@@ -690,8 +705,9 @@ int arquivo_pode_utilizar (int indice_cliente, int arquivo_is_put)
 	 *
 	 * put + put / put + get / get + put / get + get
 	 * nao			/	nao				/	nao				/ ok
-	 * Retorna 0: nao pode utilizar
-	 * Retorna 1: pode utilizar
+	 * Retorna -1: nao pode utilizar
+	 * Retorna 0: pode utilizar (tem que adicionar na lista)
+	 * Retorna 1: pode utilizar (ja esta na lista)
 	 */
 
 	struct Arquivos *paux;
@@ -699,7 +715,7 @@ int arquivo_pode_utilizar (int indice_cliente, int arquivo_is_put)
 
 	if (lista_arquivos == NULL)
 	{
-		return 1;
+		return 0;
 	}
 	else
 	{
@@ -714,14 +730,14 @@ int arquivo_pode_utilizar (int indice_cliente, int arquivo_is_put)
 				/*! Verifica se arquivo pode ser acessado */
 				if (paux->arquivo_is_put || arquivo_is_put)
 				{
-					return 0;
+					return -1;
 				}
 				return 1;
 			}
 			paux = paux->next;
 		}
 	}
-	return 1;
+	return 0;
 }
 
 void insere_lista_arquivos(int indice_cliente, int arquivo_is_put)
@@ -866,7 +882,7 @@ void cabecalho_put (int indice_cliente)
 	/* Se o diretorio for valido */
 	if (existe_diretorio(clientes_ativos[indice_cliente].caminho))
 	{
-		/*! Se o arquivo ja existe: abrir com ab, retornar 200 OK */
+		/*! Se o arquivo ja existe: retornar 200 OK */
 		if (existe_pagina(clientes_ativos[indice_cliente].caminho))
 		{
 			temp = envia_cabecalho(indice_cliente, "HTTP/1.0 200 OK\r\n\r\n", 0);
@@ -875,7 +891,7 @@ void cabecalho_put (int indice_cliente)
 				return;
 			}
 		}
-		/*! Se o arquivo ainda nao existe: abrir com wb, retornar 201 Created*/
+		/*! Se o arquivo ainda nao existe: retornar 201 Created*/
 		else
 		{
 			temp = envia_cabecalho(indice_cliente, "HTTP/1.0 201 Created\r\n\r\n", 0);
@@ -897,19 +913,8 @@ void cabecalho_put (int indice_cliente)
 		}
 		else
 		{
-			/*! Verifica se o arquivo pode ser utilizado */
-			if (!arquivo_pode_utilizar(indice_cliente, 1))
-			{
-				envia_cabecalho(indice_cliente,
-												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
-			}
 			/*! Grava 1 buffer de arquivo */
-			else
-			{
-				/*! Insere na lista de arquivos utilizados */
-				insere_lista_arquivos(indice_cliente, 1);
-				grava_arquivo(put_result, indice_cliente);
-			}
+			grava_arquivo(put_result, indice_cliente);
 		}
 		fclose(put_result);
 	}
@@ -936,6 +941,12 @@ void grava_arquivo (FILE *put_result, int indice_cliente)
 	char *buf;
 	int sock;
 	int tam_alocar;
+
+	/*! Se o tempo de envio da iteracao nao estiver setado */
+	if (controle_velocidade && timerisset(&t_janela) == 0)
+	{
+		gettimeofday(&t_janela, NULL);
+	}
 
 	if (controle_velocidade)
 	{
@@ -986,6 +997,11 @@ void grava_arquivo (FILE *put_result, int indice_cliente)
 		}
 		free(buf);
 		return;
+	}
+	else if (bytes == 0)
+	{
+		printf("Socket %d encerrou a conexao.\n", sock);
+		encerra_cliente (indice_cliente);
 	}
 	free(buf);
 }

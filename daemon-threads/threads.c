@@ -16,9 +16,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include <netinet/in.h>
 #include <arpa/inet.h>
-#include <sys/wait.h>
 #include <signal.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -29,7 +27,7 @@
 //#include "func_caminho.h"
 
 #define BUFFERSIZE BUFSIZ
-#define MAXCLIENTS 100
+#define MAXCLIENTS 350
 #define NUM_THREADS 50
 #define PORTA_THREADS 2016
 
@@ -40,15 +38,15 @@ typedef struct Monitoramento
 {
 	FILE *fp;
 	int sock;
-	int enviar;
+	//int enviar;
 	int recebeu_cabecalho;
 	int tam_cabecalho;
 	unsigned long frame_recebido;
 	unsigned long frame_escrito;
 	unsigned long tam_arquivo;
 	unsigned long bytes_por_envio;
-	unsigned long bytes_enviados;
-	unsigned long bytes_lidos;
+	unsigned long bytes_enviados; /*! Get: bytes enviados, Put: bytes recebidos*/
+	unsigned long bytes_lidos; /*! Get: bytes lidos, Put: bytes escritos */
 	unsigned long pode_enviar; /*! Bytes para enviar sem estourar a banda */
 	char caminho[PATH_MAX+1];
 	char cabecalho[BUFFERSIZE+1];
@@ -109,7 +107,7 @@ int envia_cliente (int sock_cliente, char mensagem[], int size_strlen);
 int arquivo_pode_utilizar (int indice, int arquivo_is_put);
 void insere_lista_arquivos(int indice, int arquivo_is_put);
 void remove_arquivo_lista (int indice);
-void recupera_tam_arquivo (int indice);
+int recupera_tam_arquivo (int indice);
 void cria_threads();
 void *funcao_thread(void *id);
 void insere_fila_request_get (int indice);
@@ -125,13 +123,14 @@ void insere_fila_request_put(int indice, char *buf, int tam_buffer,
 														 unsigned long frame);
 put_request *retira_fila_request_put ();
 void recebe_arquivo_put (int indice);
+int calcula_tam_alocar (int indice);
 
 struct Monitoramento clientes_ativos[MAXCLIENTS];
 struct Monitoramento cliente_vazio = {0};
 struct Cliente_Thread clientes_threads[MAXCLIENTS];
 struct Arquivos *lista_arquivos = NULL;
 char diretorio[PATH_MAX+1];
-int excluir_ativos = 0;
+int ativos = 0;
 int controle_velocidade;
 int quit = 0;
 long banda_maxima;
@@ -147,7 +146,6 @@ STAILQ_HEAD(, GetRequest) fila_request_get;
 pthread_mutex_t mutex_fila_request_get;
 STAILQ_HEAD(, GetResponse) fila_response_get;
 pthread_mutex_t mutex_fila_response_get;
-
 STAILQ_HEAD(, PutRequest) fila_request_put;
 pthread_mutex_t mutex_fila_request_put;
 
@@ -164,6 +162,7 @@ int main (int argc, char **argv)
 	sigset_t set;
   struct sockaddr_in servidor;
 	struct sockaddr_in addr_thread;
+	//struct sockaddr_un addr_thread;
   struct sockaddr_in cliente;
   socklen_t addrlen;
 	socklen_t addrlen_thread;
@@ -173,7 +172,6 @@ int main (int argc, char **argv)
   int porta;
   int max_fd;
   int i;
-	int ativos = 0;
 	int pedido_cliente;
 	char recebido[3];
 
@@ -310,9 +308,9 @@ int main (int argc, char **argv)
 			}
 			else
 			{
-				/*! Configuracao inicial de um cliente ativo */
+				/*! Adiciona o novo cliente no array de clientes ativos */
 				clientes_ativos[ativos].sock = sock_cliente;
-				clientes_ativos[ativos].enviar = 1;
+				//clientes_ativos[ativos].enviar = 1;
 
 				/*! Controle da quantidade de clientes ativos */
 				ativos++;
@@ -330,7 +328,7 @@ int main (int argc, char **argv)
 
 		/*! Recebe mensagem das threads */
 		addrlen_thread = sizeof(addr_thread);
-		if (recvfrom(sock_thread, recebido, sizeof(recebido), 0,
+		while (recvfrom(sock_thread, recebido, sizeof(recebido), 0,
 								(struct sockaddr *) &addr_thread, &addrlen_thread) > 0)
 		{
 			if(!STAILQ_EMPTY(&fila_response_get))
@@ -345,8 +343,6 @@ int main (int argc, char **argv)
 		}
 
 		/*! Recebe requests do cliente */
-		ativos -= excluir_ativos;
-		excluir_ativos = 0;
 		timerclear(&t_janela);
 		timerclear(&timeout);
 		for (i = 0; i < MAXCLIENTS; i++)
@@ -368,7 +364,6 @@ int main (int argc, char **argv)
 				}
 			}
 		}
-		ativos -= excluir_ativos;
   }
   close(sock_servidor);
 	close(sock_thread);
@@ -434,7 +429,7 @@ void *funcao_thread (void *id)
   sigaddset(&set, SIGINT);
   pthread_sigmask(SIG_BLOCK, &set, NULL);
 
-	/*! Inicia SOCK_DGRAM */
+	/*! Inicia SOCK_DGRAM : usar o AF_UNIX */
 	sock_local = socket(PF_INET, SOCK_DGRAM, 0);
 	if (sock_local == -1)
 	{
@@ -462,7 +457,6 @@ void *funcao_thread (void *id)
 
 		if (quit)
 		{
-			printf("Recebeu quit: thread %ld\n", (long) id);
 			close(sock_local);
 			return NULL;
 		}
@@ -486,9 +480,9 @@ void *funcao_thread (void *id)
 			bytes_lidos = leitura_arquivo(indice);
 			pthread_mutex_unlock(&clientes_threads[indice].mutex);
 
+			/*! Erro na leitura */
 			if (bytes_lidos < 0)
 			{
-				/*! Erro na leitura */
 				quit = 1;
 			}
 			else
@@ -509,7 +503,7 @@ void *funcao_thread (void *id)
 				/*! Bytes lidos = 0 */
 				else
 				{
-					quit = 1;
+					encerra_cliente(indice);
 				}
 			}
 		}
@@ -532,7 +526,7 @@ void *funcao_thread (void *id)
 
 			/*! Escreve no arquivo */
 			pthread_mutex_lock(&clientes_threads[indice].mutex);
-			
+
 			/*! Controlar a ordem de escrita dos frames recebidos */
 			while (frame != clientes_ativos[indice].frame_escrito)
 			{
@@ -542,9 +536,9 @@ void *funcao_thread (void *id)
 
 			bytes_lidos = grava_arquivo(indice, tam_buffer, buffer);
 
+			/*! Erro na escrita */
 			if (bytes_lidos <= 0)
 			{
-				/*! Erro na escrita */
 				quit = 1;
 			}
 			else
@@ -573,6 +567,10 @@ put_request *retira_fila_request_put ()
 	return retorno;
 }
 
+/*! Retorna -1: erro na leitura
+ * Retorna 0: terminou a leitura do arquivo
+ * Retorna > 0: bytes lidos
+ */
 int leitura_arquivo (int indice)
 {
 	char *buf = NULL;
@@ -580,34 +578,13 @@ int leitura_arquivo (int indice)
 	unsigned long pular_buf = 0;
 	size_t tam_alocar = 0;
 
-	if (controle_velocidade)
-	{
-		if (banda_maxima < (BUFFERSIZE+1))
-		{
-			tam_alocar = banda_maxima;
-		}
-		else
-		{
-			if (clientes_ativos[indice].pode_enviar != 0)
-			{
-				tam_alocar = clientes_ativos[indice].pode_enviar;
-				clientes_ativos[indice].pode_enviar = 0;
-			}
-			else
-			{
-				tam_alocar = BUFFERSIZE+1;
-			}
-		}
-	}
-	else
-	{
-		tam_alocar = BUFFERSIZE+1;
-	}
+	tam_alocar = calcula_tam_alocar(indice);
 	buf = malloc(sizeof(char) * tam_alocar);
 
 	/*! Inicia variaveis locais para melhorar leitura do codigo */
 	pular_buf = clientes_ativos[indice].bytes_lidos;
 
+	/*! Nao deixa escrever alem do tamanho do arquivo */
 	if (clientes_ativos[indice].tam_arquivo == pular_buf)
 	{
 		free(buf);
@@ -630,6 +607,14 @@ int leitura_arquivo (int indice)
 	{
 		clientes_ativos[indice].bytes_lidos += bytes_lidos;
 		insere_fila_response_get(buf, indice, bytes_lidos);
+	}
+	else if (ferror(clientes_ativos[indice].fp))
+	{
+		return -1; /*! Erro na leitura */
+	}
+	else
+	{
+		return 0; /*! EOF */
 	}
 
 	free(buf);
@@ -665,6 +650,7 @@ void cabecalho_parser (int indice)
   char *contexto;
 	int inserir = 0;
 
+	/*! Cria o buffer para nao alterar o cabecalho do cliente */
 	memset(buffer, '\0', sizeof(buffer));
 	size_strlen = strlen(clientes_ativos[indice].cabecalho);
 	strncpy(buffer, clientes_ativos[indice].cabecalho, size_strlen);
@@ -708,8 +694,7 @@ void cabecalho_parser (int indice)
 		inserir = arquivo_pode_utilizar(indice, 0);
 		if (inserir == -1)
 		{
-			envia_cabecalho(indice,
-												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
+			envia_cabecalho(indice, "HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
 			return;
 		}
 		else if (inserir == 0)
@@ -726,8 +711,7 @@ void cabecalho_parser (int indice)
 		inserir = arquivo_pode_utilizar(indice, 1);
 		if (inserir == -1)
 		{
-			envia_cabecalho(indice,
-												"HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
+			envia_cabecalho(indice, "HTTP/1.0 503 Service Unavailable\r\n\r\n", 1);
 			return;
 		}
 		else if (inserir == 0)
@@ -740,8 +724,7 @@ void cabecalho_parser (int indice)
   /*! Se nao houver o GET nem PUT no inicio : 501 Not Implemented */
   else
   {
-		envia_cabecalho(indice,
-											"HTTP/1.0 501 Not Implemented\r\n\r\n", 1);
+		envia_cabecalho(indice, "HTTP/1.0 501 Not Implemented\r\n\r\n", 1);
 		return;
   }
 }
@@ -766,8 +749,10 @@ void formato_mensagem ()
  * \param[in] porta Porta que o servidor deve conectar
  */
 void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
-											int *sock_thread, struct sockaddr_in *addr_thread)
+											int *sock_thread, struct sockaddr_in *addr_thread) //struct sockaddr_un addr_thread
 {
+	//int size;
+
   /*! Cria socket para o servidor */
   (*sock) = socket(PF_INET, SOCK_STREAM, 0);
   if ((*sock) == -1)
@@ -808,6 +793,7 @@ void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
   }
 
   /* Socket local para as threads */
+	//(*sock_thread) = socket(AF_UNIX, SOCK_DGRAM, 0);
 	(*sock_thread) = socket(PF_INET, SOCK_DGRAM, 0);
 	if ((*sock_thread) == -1)
 	{
@@ -825,7 +811,10 @@ void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
 	(*addr_thread).sin_family = AF_INET;
 	(*addr_thread).sin_addr.s_addr = htonl(INADDR_ANY);
 	(*addr_thread).sin_port = htons(PORTA_THREADS);
-
+	/*(*addr_thread).sun_family = AF_UNIX;
+	strncpy((*addr_thread).sun_path, "temp");
+	unlink((*addr_thread).sun_path);
+	size = strlen((*addr_thread).sub_path) + sizeof((*addr_thread).sun_family);*/
 	if (bind((*sock_thread), (struct sockaddr *) &(*addr_thread),
 						sizeof(struct sockaddr)) == -1)
 	{
@@ -917,10 +906,15 @@ void encerra_cliente (int indice)
 		FD_CLR(clientes_ativos[indice].sock, &read_fds);
 		printf("Encerrada conexao com socket %d\n",
 						clientes_ativos[indice].sock);
-		fclose(clientes_ativos[indice].fp);
+		if (clientes_ativos[indice].fp != NULL)
+		{
+			fclose(clientes_ativos[indice].fp);
+		}
 		close(clientes_ativos[indice].sock);
 		zera_struct_cliente(indice);
-		excluir_ativos++;
+		ativos--;
+		if (ativos < 0)
+			ativos = 0;
 	}
 }
 
@@ -1035,6 +1029,7 @@ void insere_fila_request_get (int indice)
 	paux->indice = indice;
 	STAILQ_INSERT_TAIL(&fila_request_get, paux, entry);
 
+
 	pthread_mutex_lock(&mutex_master);
 	pthread_cond_broadcast(&condition_master);
 	pthread_mutex_unlock(&mutex_master);
@@ -1051,8 +1046,7 @@ void recebe_cabecalho_cliente (int indice)
 	sock_cliente = clientes_ativos[indice].sock;
 	memset(buffer, '\0', sizeof(buffer));
 
-	/* Recupera o cabecalho e grava em 'buffer' */
-	pthread_mutex_lock(&clientes_threads[indice].mutex);
+	/*! Recupera o cabecalho */
 	int fim_cabecalho = 0;
 	while ((!fim_cabecalho)
 					&& ((bytes = recv(sock_cliente, buffer, sizeof(buffer), 0)) > 0))
@@ -1068,7 +1062,6 @@ void recebe_cabecalho_cliente (int indice)
 			clientes_ativos[indice].recebeu_cabecalho = 1;
 		}
 	}
-	pthread_mutex_unlock(&clientes_threads[indice].mutex);
 	if (bytes < 0)
 	{
 		perror("recv()");
@@ -1128,6 +1121,7 @@ int calcula_tam_alocar (int indice)
 	}
 	return tam_alocar;
 }
+
 
 void recebe_arquivo_put (int indice)
 {
@@ -1223,10 +1217,19 @@ int envia_cabecalho (int indice, char cabecalho[], int flag_erro)
 	return 0;
 }
 
+/*! Verifica se o path indicado pelo cliente 'e um diretorio */
+int caminho_diretorio (char *caminho)
+{
+	struct stat buffer = {0};
+	stat(caminho, &buffer);
+	return S_ISDIR(buffer.st_mode);
+}
+
 void cabecalho_get (int indice)
 {
   /*! Casos de request valido: GET /path/to/file HTTP/1.0 (ou HTTP/1.1) */
-	if (existe_pagina(clientes_ativos[indice].caminho))
+	if ((!caminho_diretorio(clientes_ativos[indice].caminho))
+				&& existe_pagina(clientes_ativos[indice].caminho))
   {
 		clientes_ativos[indice].fp = fopen(clientes_ativos[indice].caminho, "rb");
 
@@ -1325,7 +1328,8 @@ void insere_lista_arquivos(int indice, int arquivo_is_put)
 	}
 }
 
-void recupera_tam_arquivo (int indice)
+/*! Retorna 0 se nao conseguiu recuperar o tamanho, e 1 se conseguiu*/
+int recupera_tam_arquivo (int indice)
 {
 	char cabecalho[BUFFERSIZE+1];
 	char content_length[20] = "Content-Length: ";
@@ -1339,7 +1343,14 @@ void recupera_tam_arquivo (int indice)
 	tam_content = strlen(content_length);
 	strncpy(cabecalho, clientes_ativos[indice].cabecalho, tam_cabecalho);
 
+	/*! Encontra a primeira ocorrencia de content-length no cabecalho */
 	recuperar = memmem(cabecalho, tam_cabecalho, content_length, tam_content);
+
+	if (recuperar == NULL)
+	{
+		return 0;
+	}
+
 	recuperar += tam_content;
 
 	i = 0;
@@ -1352,6 +1363,8 @@ void recupera_tam_arquivo (int indice)
 	numero_tamanho[i] = '\0';
 	long tam_arquivo = atol(numero_tamanho);
 	clientes_ativos[indice].tam_arquivo = tam_arquivo;
+
+	return 1;
 }
 
 void cabecalho_put (int indice)
@@ -1359,8 +1372,16 @@ void cabecalho_put (int indice)
 	FILE *put_result = NULL;
 	int temp;
 
+	/*! Recupera o tamanho do arquivo que vai receber (Content-Length) */
+	if(!recupera_tam_arquivo(indice))
+	{
+		envia_cabecalho(indice, "HTTP/1.1 411 Length Required\r\n\r\n", 1);
+		return;
+	}
+
 	/* Se o diretorio for valido */
-	if (existe_diretorio(clientes_ativos[indice].caminho))
+	if ((!caminho_diretorio(clientes_ativos[indice].caminho))
+				&& (existe_diretorio(clientes_ativos[indice].caminho)))
 	{
 		/*! Se o arquivo ja existe: retornar 200 OK */
 		if (existe_pagina(clientes_ativos[indice].caminho))
@@ -1392,11 +1413,6 @@ void cabecalho_put (int indice)
 				return;
 			}
 		}
-
-		/*! Recupera o tamanho do arquivo que vai receber (Content-Length) */
-		pthread_mutex_lock(&clientes_threads[indice].mutex);
-		recupera_tam_arquivo(indice);
-		pthread_mutex_unlock(&clientes_threads[indice].mutex);
 
 		/*! Abre o arquivo */
 		clientes_ativos[indice].fp = fopen(clientes_ativos[indice].caminho, "wb");
@@ -1435,7 +1451,7 @@ int grava_arquivo (int indice, int tam_buffer, char *buffer)
 	int bytes_escritos;
 
 	fseek(clientes_ativos[indice].fp, 0L, SEEK_END);
-	
+
 	bytes_escritos = fwrite(buffer, tam_buffer, 1, clientes_ativos[indice].fp);
 
 	if (bytes_escritos > 0)
@@ -1467,10 +1483,12 @@ int existe_diretorio (char *caminho)
  * \brief Envia ao cliente uma mensagem. Trata SIGPIPE.
  * \param[in] indice Indice do array de clientes ativos que identica
  * qual cliente esta sendo processado.
+ * \param[in] mensagem Mensagem a ser enviada para o cliente.
+ * \param[in] size Tamanho da mensagem a ser enviada.
  * \return Quantidade de bytes enviados para o cliente, caso de envio correto.
  * \return -1 em caso de erro no envio.
  */
-int envia_cliente (int indice, char mensagem[], int size_strlen)
+int envia_cliente (int indice, char mensagem[], int size)
 {
 	int enviado;
 
@@ -1480,8 +1498,7 @@ int envia_cliente (int indice, char mensagem[], int size_strlen)
 		gettimeofday(&t_janela, NULL);
 	}
 
-	enviado = send(clientes_ativos[indice].sock, mensagem, size_strlen,
-									MSG_NOSIGNAL);
+	enviado = send(clientes_ativos[indice].sock, mensagem, size, MSG_NOSIGNAL);
 
 	if (enviado < 0)
 	{

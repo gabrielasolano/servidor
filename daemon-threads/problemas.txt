@@ -8,11 +8,15 @@ Deve proibir? Pode deixar dar o erro de recv?
 
 3. Problema de memoria voltou?
 
-4. Trocar família dos sockets locais (utilizar AF_UNIX)
+4. Problema no CTRL+C novamente
 
 5. Fazer controle de velocidade
 
 6. Refatorar o código
+
+PROBLEMA DO PUT: cabecalho esta recuperando parte do arquivo!!! Entao a condicao
+bytes_lidos >= tam_arquivo da funcao_thread nunca é satisfeita: loop infinito entre
+sendto e recvfrom.
 
 TESTAR
 

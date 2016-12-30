@@ -167,7 +167,7 @@ int main (int argc, char **argv)
 	struct sockaddr_un addr_thread;
   struct sockaddr_in cliente;
   socklen_t addrlen;
-	socklen_t addrlen_thread;
+	//socklen_t addrlen_thread;
   int sock_servidor;
 	int sock_thread;
   int sock_cliente;
@@ -312,7 +312,6 @@ int main (int argc, char **argv)
 			{
 				/*! Adiciona o novo cliente no array de clientes ativos */
 				clientes_ativos[ativos].sock = sock_cliente;
-				//clientes_ativos[ativos].enviar = 1;
 
 				/*! Controle da quantidade de clientes ativos */
 				ativos++;
@@ -494,8 +493,8 @@ void *funcao_thread (void *id)
 										&& (clientes_ativos[indice].bytes_enviados
 													!= clientes_ativos[indice].bytes_lidos)))
 				{
-					if (sendto(sock_local, enviar, sizeof(enviar), 0,
-							(struct sockaddr *) &addr_local, sizeof(struct sockaddr_un)) == -1)
+					if (sendto(sock_local, enviar, sizeof(enviar), 0, (struct sockaddr *)
+											&addr_local, sizeof(struct sockaddr_un)) == -1)
 					{
 						perror("sendto()");
 						quit = 1;
@@ -535,7 +534,9 @@ void *funcao_thread (void *id)
 													&clientes_threads[indice].mutex);
 			}
 
-			bytes_lidos = grava_arquivo(indice, tam_buffer, buffer);
+			//bytes_lidos = grava_arquivo(indice, tam_buffer, buffer);
+
+			bytes_lidos = fwrite(buffer, tam_buffer, 1, clientes_ativos[indice].fp);
 
 			/*! Erro na escrita */
 			if (bytes_lidos <= 0)
@@ -544,6 +545,10 @@ void *funcao_thread (void *id)
 			}
 			else
 			{
+				clientes_ativos[indice].bytes_lidos += (tam_buffer * bytes_lidos);
+				clientes_ativos[indice].bytes_por_envio += (tam_buffer * bytes_lidos);
+				clientes_ativos[indice].frame_escrito++;
+				
 				if (clientes_ativos[indice].bytes_lidos
 							>= clientes_ativos[indice].tam_arquivo)
 				{
@@ -1446,7 +1451,7 @@ int grava_arquivo (int indice, int tam_buffer, char *buffer)
 {
 	int bytes_escritos;
 
-	fseek(clientes_ativos[indice].fp, 0L, SEEK_END);
+	//fseek(clientes_ativos[indice].fp, 0L, SEEK_END);
 
 	bytes_escritos = fwrite(buffer, tam_buffer, 1, clientes_ativos[indice].fp);
 

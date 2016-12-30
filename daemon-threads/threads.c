@@ -24,12 +24,14 @@
 #include <time.h>
 #include <ctype.h>
 #include <sys/queue.h>
+#include <sys/un.h>
 //#include "func_caminho.h"
 
 #define BUFFERSIZE BUFSIZ
 #define MAXCLIENTS 350
 #define NUM_THREADS 50
-#define PORTA_THREADS 2016
+#define SOCK_PATH "echo_socket"
+//#define PORTA_THREADS 2016
 
 /*!
  * Struct para controle dos clientes ativos.
@@ -91,7 +93,7 @@ typedef struct PutRequest
 
 void formato_mensagem();
 void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
-											int *sock_thread, struct sockaddr_in *addr_thread);
+											int *sock_thread, struct sockaddr_un/*struct sockaddr_in*/ *addr_thread);
 void zera_struct_cliente (int indice);
 void encerra_cliente (int indice);
 void verifica_banda (int indice, int ativos);
@@ -161,8 +163,8 @@ int main (int argc, char **argv)
 {
 	sigset_t set;
   struct sockaddr_in servidor;
-	struct sockaddr_in addr_thread;
-	//struct sockaddr_un addr_thread;
+	//struct sockaddr_in addr_thread;
+	struct sockaddr_un addr_thread;
   struct sockaddr_in cliente;
   socklen_t addrlen;
 	socklen_t addrlen_thread;
@@ -327,9 +329,10 @@ int main (int argc, char **argv)
 		}
 
 		/*! Recebe mensagem das threads */
-		addrlen_thread = sizeof(addr_thread);
-		while (recvfrom(sock_thread, recebido, sizeof(recebido), 0,
-								(struct sockaddr *) &addr_thread, &addrlen_thread) > 0)
+		//addrlen_thread = sizeof(addr_thread);
+		//while (recvfrom(sock_thread, recebido, sizeof(recebido), 0,
+			//					(struct sockaddr *) &addr_thread, &addrlen_thread) > 0)
+		if (recv(sock_thread, recebido, sizeof(recebido), MSG_DONTWAIT) > 0)
 		{
 			if(!STAILQ_EMPTY(&fila_response_get))
 			{
@@ -421,7 +424,7 @@ void *funcao_thread (void *id)
 	unsigned long frame;
 	char buffer[BUFFERSIZE+1];
 	char enviar[3] = "ok";
-	struct sockaddr_in addr_local;
+	struct sockaddr_un addr_local;
 	sigset_t set;
 
 	signal(SIGINT, signal_handler);
@@ -430,7 +433,7 @@ void *funcao_thread (void *id)
   pthread_sigmask(SIG_BLOCK, &set, NULL);
 
 	/*! Inicia SOCK_DGRAM : usar o AF_UNIX */
-	sock_local = socket(PF_INET, SOCK_DGRAM, 0);
+	sock_local = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if (sock_local == -1)
 	{
 		perror("sock local()");
@@ -438,10 +441,8 @@ void *funcao_thread (void *id)
 	}
 
 	/*! Configura SOCK_DGRAM */
-	addr_local.sin_family = AF_INET;
-	addr_local.sin_port = htons(PORTA_THREADS);
-	addr_local.sin_addr.s_addr = htonl(INADDR_ANY);
-	memset(&(addr_local.sin_zero), '\0', 8);
+	addr_local.sun_family = AF_UNIX;
+	memcpy(addr_local.sun_path, SOCK_PATH, sizeof(addr_local.sun_path));
 
 	while (1)
 	{
@@ -494,7 +495,7 @@ void *funcao_thread (void *id)
 													!= clientes_ativos[indice].bytes_lidos)))
 				{
 					if (sendto(sock_local, enviar, sizeof(enviar), 0,
-							(struct sockaddr *) &addr_local, sizeof(struct sockaddr)) == -1)
+							(struct sockaddr *) &addr_local, sizeof(struct sockaddr_un)) == -1)
 					{
 						perror("sendto()");
 						quit = 1;
@@ -749,10 +750,8 @@ void formato_mensagem ()
  * \param[in] porta Porta que o servidor deve conectar
  */
 void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
-											int *sock_thread, struct sockaddr_in *addr_thread) //struct sockaddr_un addr_thread
+											int *sock_thread, struct sockaddr_un *addr_thread)
 {
-	//int size;
-
   /*! Cria socket para o servidor */
   (*sock) = socket(PF_INET, SOCK_STREAM, 0);
   if ((*sock) == -1)
@@ -793,30 +792,23 @@ void inicia_servidor (int *sock, struct sockaddr_in *servidor, const int porta,
   }
 
   /* Socket local para as threads */
-	//(*sock_thread) = socket(AF_UNIX, SOCK_DGRAM, 0);
-	(*sock_thread) = socket(PF_INET, SOCK_DGRAM, 0);
+	(*sock_thread) = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if ((*sock_thread) == -1)
 	{
 		perror("socket thread()");
 		encerra_servidor();
 	}
-
-	/*! Sock thread nao bloqueante */
-	struct timeval read_timeout;
+	
+	/*struct timeval read_timeout;
 	read_timeout.tv_sec = 0;
 	read_timeout.tv_usec = 1;
-	setsockopt((*sock_thread), SOL_SOCKET, SO_RCVTIMEO, &read_timeout,
-							sizeof read_timeout);
-
-	(*addr_thread).sin_family = AF_INET;
-	(*addr_thread).sin_addr.s_addr = htonl(INADDR_ANY);
-	(*addr_thread).sin_port = htons(PORTA_THREADS);
-	/*(*addr_thread).sun_family = AF_UNIX;
-	strncpy((*addr_thread).sun_path, "temp");
-	unlink((*addr_thread).sun_path);
-	size = strlen((*addr_thread).sub_path) + sizeof((*addr_thread).sun_family);*/
-	if (bind((*sock_thread), (struct sockaddr *) &(*addr_thread),
-						sizeof(struct sockaddr)) == -1)
+	setsockopt((*sock_thread), SOL_SOCKET, SO_RCVTIMEO, &read_timeout, sizeof read_timeout);*/
+	
+	(*addr_thread).sun_family = AF_UNIX;
+	memcpy((*addr_thread).sun_path, SOCK_PATH, sizeof((*addr_thread).sun_path));
+	
+	if(bind((*sock_thread), (struct sockaddr *) &(*addr_thread),
+						sizeof(*addr_thread)) == -1)
 	{
 		perror("bind thread()");
 		encerra_servidor();
@@ -889,6 +881,8 @@ void encerra_servidor ()
 		free(p1);
 	}
 
+	/*! Remove SOCK_PATH */
+	remove(SOCK_PATH);
 	pthread_exit(NULL);
 	exit(1);
 }
@@ -900,6 +894,7 @@ void encerra_servidor ()
  */
 void encerra_cliente (int indice)
 {
+	pthread_mutex_lock(&clientes_threads[indice].mutex);
 	if (clientes_ativos[indice].sock != -1)
 	{
 		remove_arquivo_lista(indice);
@@ -916,6 +911,7 @@ void encerra_cliente (int indice)
 		if (ativos < 0)
 			ativos = 0;
 	}
+	pthread_mutex_unlock(&clientes_threads[indice].mutex);
 }
 
 void remove_arquivo_lista (int indice)

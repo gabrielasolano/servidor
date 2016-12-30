@@ -1,0 +1,20 @@
+1. Put num arquivo que esta sendo put
+	curl -T diretorio/CentOS-6.3-x86_64-minimal.iso localhost:8080/resultado-put/imagem.iso
+	curl -T resultado-put/imagem.iso localhost:8080/testeErrado.iso
+
+Deve proibir? Pode deixar dar o erro de recv?
+
+2. Entender como funciona o signal handler (signal, sigaddset, sigprocmask, etc)
+
+3. Problema de memoria voltou?
+
+4. Trocar família dos sockets locais (utilizar AF_UNIX)
+
+5. Fazer controle de velocidade
+
+6. Refatorar o código
+
+TESTAR
+
+1. GET/PUT para 1, 10, 50, 100 clientes (sem matar o servidor)
+

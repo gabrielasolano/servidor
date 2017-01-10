@@ -1,0 +1,127 @@
+!_TAG_FILE_FORMAT	2	/extended format; --format=1 will not append ;" to lines/
+!_TAG_FILE_SORTED	1	/0=unsorted, 1=sorted, 2=foldcase/
+!_TAG_PROGRAM_AUTHOR	Darren Hiebert	/dhiebert@users.sourceforge.net/
+!_TAG_PROGRAM_NAME	Exuberant Ctags	//
+!_TAG_PROGRAM_URL	http://ctags.sourceforge.net	/official site/
+!_TAG_PROGRAM_VERSION	5.8	//
+Arquivos	estruturas.h	/^typedef struct Arquivos$/;"	s
+BUFFERSIZE	funcoes_comuns.h	24;"	d
+CLIENTE_H	cliente.h	2;"	d
+Cliente_Thread	funcoes_comuns.h	/^typedef struct Cliente_Thread$/;"	s
+ESTRUTURAS_H	estruturas.h	2;"	d
+FUNCOES_COMUNS_H	funcoes_comuns.h	2;"	d
+GetRequest	estruturas.h	/^typedef struct GetRequest$/;"	s
+GetResponse	estruturas.h	/^typedef struct GetResponse$/;"	s
+MAXCLIENTS	funcoes_comuns.h	25;"	d
+Monitoramento	funcoes_comuns.h	/^typedef struct Monitoramento$/;"	s
+NUM_THREADS	funcoes_comuns.h	26;"	d
+PutRequest	estruturas.h	/^typedef struct PutRequest$/;"	s
+SERVIDOR_H	servidor.h	2;"	d
+SOCK_PATH	funcoes_comuns.h	27;"	d
+THREADS_H	threads.h	2;"	d
+_GNU_SOURCE	funcoes_comuns.h	4;"	d
+aceita_conexoes	servidor.c	/^int aceita_conexoes (int pedido_cliente)$/;"	f
+arquivo_is_put	estruturas.h	/^	int arquivo_is_put;$/;"	m	struct:Arquivos
+arquivo_pode_utilizar	estruturas.c	/^int arquivo_pode_utilizar (int indice, int arquivo_is_put)$/;"	f
+arquivos	estruturas.h	/^} arquivos;$/;"	t	typeref:struct:Arquivos
+ativos	funcoes_comuns.c	/^int ativos = 0;$/;"	v
+atualiza_readfd	servidor.c	/^void atualiza_readfd ()$/;"	f
+banda_maxima	funcoes_comuns.c	/^long banda_maxima;$/;"	v
+buffer	estruturas.h	/^	char buffer[BUFFERSIZE+1];$/;"	m	struct:GetResponse
+buffer	estruturas.h	/^	char buffer[BUFFERSIZE+1];$/;"	m	struct:PutRequest
+buffer_size	funcoes_comuns.c	/^long buffer_size = BUFFERSIZE+1;$/;"	v
+bytes_enviados	funcoes_comuns.h	/^	unsigned long bytes_enviados; \/*! Get: bytes enviados, Put: bytes recebidos*\/$/;"	m	struct:Monitoramento
+bytes_lidos	funcoes_comuns.h	/^	unsigned long bytes_lidos; \/*! Get: bytes lidos, Put: bytes escritos *\/$/;"	m	struct:Monitoramento
+bytes_por_envio	funcoes_comuns.h	/^	unsigned long bytes_por_envio;$/;"	m	struct:Monitoramento
+cabecalho	funcoes_comuns.h	/^	char cabecalho[BUFFERSIZE+1];$/;"	m	struct:Monitoramento
+cabecalho_get	cliente.c	/^void cabecalho_get (int indice)$/;"	f
+cabecalho_parser	cliente.c	/^void cabecalho_parser (int indice)$/;"	f
+cabecalho_put	cliente.c	/^void cabecalho_put (int indice)$/;"	f
+caminho	estruturas.h	/^	char caminho[PATH_MAX+1];$/;"	m	struct:Arquivos
+caminho	funcoes_comuns.h	/^	char caminho[PATH_MAX+1];$/;"	m	struct:Monitoramento
+caminho_diretorio	cliente.c	/^int caminho_diretorio (char *caminho)$/;"	f
+cliente_thread	funcoes_comuns.h	/^} cliente_thread;$/;"	t	typeref:struct:Cliente_Thread
+cliente_vazio	cliente.c	/^struct Monitoramento cliente_vazio = {0};$/;"	v	typeref:struct:Monitoramento
+clientes	funcoes_comuns.c	/^struct Monitoramento clientes[MAXCLIENTS];$/;"	v	typeref:struct:Monitoramento
+clientes_threads	funcoes_comuns.c	/^struct Cliente_Thread clientes_threads[MAXCLIENTS];$/;"	v	typeref:struct:Cliente_Thread
+cond	funcoes_comuns.h	/^	pthread_cond_t cond;$/;"	m	struct:Cliente_Thread
+condition_master	funcoes_comuns.c	/^pthread_cond_t condition_master;$/;"	v
+controle_banda	cliente.c	/^int controle_banda (int indice)$/;"	f
+controle_velocidade	funcoes_comuns.c	/^int controle_velocidade;$/;"	v
+cria_threads	threads.c	/^void cria_threads ()$/;"	f
+diretorio	funcoes_comuns.c	/^char diretorio[PATH_MAX+1];$/;"	v
+encerra_cliente	cliente.c	/^void encerra_cliente (int indice)$/;"	f
+encerra_estruturas	estruturas.c	/^void encerra_estruturas ()$/;"	f
+encerra_servidor	servidor.c	/^void encerra_servidor ()$/;"	f
+entries	estruturas.h	/^	SLIST_ENTRY(Arquivos) entries;$/;"	m	struct:Arquivos
+entry	estruturas.h	/^	STAILQ_ENTRY(GetRequest) entry;$/;"	m	struct:GetRequest
+entry	estruturas.h	/^	STAILQ_ENTRY(GetResponse) entry;$/;"	m	struct:GetResponse
+entry	estruturas.h	/^	STAILQ_ENTRY(PutRequest) entry;$/;"	m	struct:PutRequest
+envia_cabecalho	cliente.c	/^int envia_cabecalho (int indice, char cabecalho[], int flag_erro)$/;"	f
+envia_cliente	cliente.c	/^void envia_cliente (int indice, char mensagem[], int size)$/;"	f
+existe_diretorio	cliente.c	/^int existe_diretorio (char *caminho)$/;"	f
+existe_pagina	cliente.c	/^int existe_pagina (char *caminho)$/;"	f
+fila_request_get_vazia	estruturas.c	/^int fila_request_get_vazia ()$/;"	f
+fila_request_put_vazia	estruturas.c	/^int fila_request_put_vazia ()$/;"	f
+formato_mensagem	main.c	/^void formato_mensagem ()$/;"	f
+fp	funcoes_comuns.h	/^	FILE *fp;$/;"	m	struct:Monitoramento
+frame	estruturas.h	/^	unsigned long frame;$/;"	m	struct:PutRequest
+frame_escrito	funcoes_comuns.h	/^	unsigned long frame_escrito;$/;"	m	struct:Monitoramento
+frame_recebido	funcoes_comuns.h	/^	unsigned long frame_recebido;$/;"	m	struct:Monitoramento
+funcao_principal	servidor.c	/^void funcao_principal (const int porta)$/;"	f
+funcao_thread	threads.c	/^void *funcao_thread (void *id)$/;"	f
+get_request	estruturas.h	/^} get_request;$/;"	t	typeref:struct:GetRequest
+get_response	estruturas.h	/^} get_response;$/;"	t	typeref:struct:GetResponse
+indice	estruturas.h	/^	int indice;$/;"	m	struct:Arquivos
+indice	estruturas.h	/^	int indice;$/;"	m	struct:GetRequest
+indice	estruturas.h	/^	int indice;$/;"	m	struct:GetResponse
+indice	estruturas.h	/^	int indice;$/;"	m	struct:PutRequest
+inicia_servidor	servidor.c	/^void inicia_servidor (const int porta)$/;"	f
+inicializa_estruturas	estruturas.c	/^void inicializa_estruturas()$/;"	f
+insere_fila_request_get	estruturas.c	/^void insere_fila_request_get (int indice)$/;"	f
+insere_fila_request_put	estruturas.c	/^void insere_fila_request_put(int indice, char *buf, int tam_buffer,$/;"	f
+insere_fila_response_get	estruturas.c	/^void insere_fila_response_get (char *buf, int indice, int tam_buffer)$/;"	f
+insere_fila_response_get_wait	estruturas.c	/^void insere_fila_response_get_wait (char *buf, int indice, int tam_buffer)$/;"	f
+insere_lista_arquivos	estruturas.c	/^void insere_lista_arquivos(int indice, int arquivo_is_put)$/;"	f
+main	main.c	/^int main (int argc, char **argv)$/;"	f
+max_fd	servidor.c	/^int max_fd;$/;"	v
+monitoramento	funcoes_comuns.h	/^} monitoramento;$/;"	t	typeref:struct:Monitoramento
+mutex	funcoes_comuns.h	/^	pthread_mutex_t mutex;$/;"	m	struct:Cliente_Thread
+mutex_fila_request_get	funcoes_comuns.c	/^pthread_mutex_t mutex_fila_request_get;$/;"	v
+mutex_fila_request_put	funcoes_comuns.c	/^pthread_mutex_t mutex_fila_request_put;$/;"	v
+mutex_fila_response_get	funcoes_comuns.c	/^pthread_mutex_t mutex_fila_response_get;$/;"	v
+mutex_master	funcoes_comuns.c	/^pthread_mutex_t mutex_master;$/;"	v
+pode_enviar	funcoes_comuns.h	/^	unsigned long pode_enviar; \/*! Bytes para enviar sem estourar a banda *\/$/;"	m	struct:Monitoramento
+processa_clientes	servidor.c	/^void processa_clientes(int recebido_from)$/;"	f
+put_request	estruturas.h	/^} put_request;$/;"	t	typeref:struct:PutRequest
+quit	funcoes_comuns.c	/^int quit = 0;$/;"	v
+quit	funcoes_comuns.h	/^	int quit;$/;"	m	struct:Monitoramento
+read_fds	funcoes_comuns.c	/^fd_set read_fds;$/;"	v
+recebe_arquivo_put	cliente.c	/^void recebe_arquivo_put (int indice)$/;"	f
+recebe_cabecalho_cliente	cliente.c	/^void recebe_cabecalho_cliente (int indice)$/;"	f
+recebe_sinal_threads	servidor.c	/^int recebe_sinal_threads()$/;"	f
+recebeu_cabecalho	funcoes_comuns.h	/^	int recebeu_cabecalho;$/;"	m	struct:Monitoramento
+recupera_caminho	cliente.c	/^int recupera_caminho (int indice, char *pagina)$/;"	f
+recupera_tam_arquivo	cliente.c	/^int recupera_tam_arquivo (int indice)$/;"	f
+remove_arquivo_lista	estruturas.c	/^void remove_arquivo_lista (int indice)$/;"	f
+retira_fila_request_get	estruturas.c	/^get_request *retira_fila_request_get()$/;"	f
+retira_fila_request_put	estruturas.c	/^put_request *retira_fila_request_put ()$/;"	f
+retira_fila_response_get	estruturas.c	/^get_response *retira_fila_response_get()$/;"	f
+retira_fila_response_get_wait	estruturas.c	/^get_response *retira_fila_response_get_wait()$/;"	f
+servidor_addr	servidor.c	/^struct sockaddr_in servidor_addr;$/;"	v	typeref:struct:sockaddr_in
+signal_handler	servidor.c	/^void signal_handler (int signum)$/;"	f
+sock	funcoes_comuns.h	/^	int sock;$/;"	m	struct:Monitoramento
+sock_servidor	servidor.c	/^int sock_servidor;$/;"	v
+sock_thread	servidor.c	/^int sock_thread;$/;"	v
+socket	estruturas.h	/^	int socket;$/;"	m	struct:Arquivos
+t_cliente	funcoes_comuns.h	/^	struct timeval t_cliente;$/;"	m	struct:Monitoramento	typeref:struct:Monitoramento::timeval
+tam_arquivo	funcoes_comuns.h	/^	unsigned long tam_arquivo;$/;"	m	struct:Monitoramento
+tam_buffer	estruturas.h	/^	int tam_buffer;$/;"	m	struct:GetResponse
+tam_buffer	estruturas.h	/^	int tam_buffer;$/;"	m	struct:PutRequest
+tam_cabecalho	funcoes_comuns.h	/^	int tam_cabecalho;$/;"	m	struct:Monitoramento
+tamanho_fila_request_get	estruturas.c	/^int tamanho_fila_request_get ()$/;"	f
+tamanho_fila_request_put	estruturas.c	/^int tamanho_fila_request_put ()$/;"	f
+thread_addr	servidor.c	/^struct sockaddr_un thread_addr;$/;"	v	typeref:struct:sockaddr_un
+threads	threads.c	/^pthread_t threads[NUM_THREADS];$/;"	v
+timeout	servidor.c	/^struct timeval timeout;$/;"	v	typeref:struct:timeval
+zera_struct_cliente	cliente.c	/^void zera_struct_cliente (int indice)$/;"	f

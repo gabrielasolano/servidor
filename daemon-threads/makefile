@@ -1,7 +1,8 @@
-all: programa
+all: threads
 
-
-CFLAGS = -Wall -Wextra -pthread
+CC       = gcc
+CFLAGS   = -Wall -Wextra -pthread
+LDFLAGS = -o
 
 ifdef DEBUG
 CFLAGS += -ggdb3
@@ -9,8 +10,18 @@ else
 CFLAGS += -O2
 endif
 
-programa:
-	gcc $(CFLAGS) threads.c -o threads
+SDIR   = src
 
+SOURCES  := $(wildcard $(SDIR)/*.c)
+HEADERS := $(wildcard $(SDIR)/*.h)
+OBJECTS  := $(SOURCES:$(SDIR)/%.c=$(SDIR)/%.o)
+
+threads: $(OBJECTS)
+	$(CC) $(LDFLAGS) $@ $(CFLAGS) $(OBJECTS)
+
+$(OBJECTS): $(SDIR)/%.o : $(SDIR)/%.c
+	$(CC) $(CFLAGS) -c $< $(LDFLAGS) $@
+
+.PHONEY: clean
 clean:
-	rm *.o
+	rm -f $(OBJECTS) threads

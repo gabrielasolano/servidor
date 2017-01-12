@@ -25,6 +25,8 @@
 #define MAXCLIENTS 150
 #define NUM_THREADS 50
 #define SOCK_PATH "echo_socket"
+#define CONFIG_PATH "config.txt"
+#define PID_PATH "pid.txt"
 
 /*! Struct para controle dos clientes ativos */
 typedef struct Monitoramento
@@ -53,11 +55,18 @@ typedef struct Cliente_Thread
 	pthread_cond_t cond;
 } cliente_thread;
 
+void escreve_arquivo_config(int porta, char diretorio[], long banda_maxima);
+void escreve_arquivo_pid();
+
 extern int controle_velocidade;
 extern int quit;
+extern int alterar_config;
 extern long buffer_size;
 extern long banda_maxima;
 extern char diretorio[PATH_MAX+1];
+extern char config_path[PATH_MAX+1];
+extern char pid_path[PATH_MAX+1];
+extern char sock_path[PATH_MAX+1];
 extern int ativos ;
 extern fd_set read_fds;
 extern struct Monitoramento clientes[MAXCLIENTS];

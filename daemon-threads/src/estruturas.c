@@ -290,7 +290,7 @@ int arquivo_pode_utilizar (int indice, int arquivo_is_put)
 /*!
  * \brief Insere um novo arquivo na lista de arquivos abertos
  * \param[in] indice Indice do cliente que requisitou o arquivo
- * \param[in] arquivo_is_put Flag que indica se o arquivo novo 'e um request PUT
+ * \param[in] arquivo_is_put Flag que indica se o arquivo novo 'e request PUT
  */
 void insere_lista_arquivos(int indice, int arquivo_is_put)
 {

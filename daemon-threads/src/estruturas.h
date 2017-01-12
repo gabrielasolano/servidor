@@ -40,7 +40,8 @@ void encerra_estruturas();
 void insere_fila_response_get (char *buf, int indice, int tam_buffer);
 void insere_fila_response_get_wait (char *buf, int indice, int tam_buffer);
 void insere_fila_request_get (int indice);
-void insere_fila_request_put(int indice, char *buf, int tam_buffer, unsigned long frame);
+void insere_fila_request_put(int indice, char *buf, int tam_buffer,
+															unsigned long frame);
 put_request *retira_fila_request_put ();
 get_request *retira_fila_request_get();
 get_response *retira_fila_response_get();

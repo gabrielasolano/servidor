@@ -2,7 +2,6 @@ all: threads
 
 CC       = gcc
 CFLAGS   = -Wall -Wextra -pthread
-LDFLAGS = -o
 
 ifdef DEBUG
 CFLAGS += -ggdb3
@@ -17,10 +16,10 @@ HEADERS := $(wildcard $(SDIR)/*.h)
 OBJECTS  := $(SOURCES:$(SDIR)/%.c=$(SDIR)/%.o)
 
 threads: $(OBJECTS)
-	$(CC) $(LDFLAGS) $@ $(CFLAGS) $(OBJECTS)
+	$(CC) -o $@ $(CFLAGS) $(OBJECTS)
 
 $(OBJECTS): $(SDIR)/%.o : $(SDIR)/%.c
-	$(CC) $(CFLAGS) -c $< $(LDFLAGS) $@
+	$(CC) $(CFLAGS) -c $< -o $@
 
 .PHONEY: clean
 clean:

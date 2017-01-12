@@ -1,5 +1,6 @@
 #include "servidor.h"
 
+int porta_atual;
 int max_fd;
 int sock_servidor;
 int sock_thread;
@@ -13,31 +14,21 @@ struct timeval timeout;
  * processa novos clientes.
  * \param[in] porta Porta para conexao do servidor
  */
-void funcao_principal (const int porta)
+void funcao_principal (int porta)
 {
   int i;
 	int pedido_cliente;
 	int recebido_from = 0;
 
 	signal(SIGINT, signal_handler);
+	signal(SIGUSR1, signal_interface);
 
-	/*! Atualiza a banda_maxima */
-	controle_velocidade = 0;
-	if (banda_maxima != 0)
-	{
-		controle_velocidade = 1;
-		if (banda_maxima < BUFFERSIZE+1)
-		{
-			buffer_size = banda_maxima;
-		}
-		else
-		{
-			buffer_size = BUFFERSIZE+1;
-		}
-	}
+	/*! Atualiza a buffer_size */
+	atualiza_buffer_size();
 
   printf("Iniciando servidor na porta: %d e no path: %s\n", porta, diretorio);
   inicia_servidor(porta);
+	porta_atual = porta;
 	
 	/*! Inicializa struct dos clientes e dos mutexes */
 	for (i = 0; i < MAXCLIENTS; i++)
@@ -91,6 +82,14 @@ void funcao_principal (const int porta)
 			encerra_servidor();
 		}
 
+		if (alterar_config)
+		{
+			atualiza_servidor();
+			printf("Servidor na porta: %d, path: %s e com %ld B/s de velocidade\n",
+						 porta_atual, diretorio, banda_maxima);
+			alterar_config = 0;
+		}
+		
 		atualiza_readfd();
 
 		if (!aceita_conexoes(pedido_cliente))
@@ -104,6 +103,30 @@ void funcao_principal (const int porta)
   }
   close(sock_servidor);
 	close(sock_thread);
+}
+
+/*!
+ * \brief Atualiza o tamanho do buffer de acordo com o limite de banda.
+ */
+void atualiza_buffer_size ()
+{
+	controle_velocidade = 0;
+	if (banda_maxima != 0)
+	{
+		controle_velocidade = 1;
+		if (banda_maxima < BUFFERSIZE+1)
+		{
+			buffer_size = banda_maxima;
+		}
+		else
+		{
+			buffer_size = BUFFERSIZE+1;
+		}
+	}
+	else
+	{
+		buffer_size = BUFFERSIZE+1;
+	}
 }
 
 /*!
@@ -128,8 +151,8 @@ void processa_clientes(int recebido_from)
 				free(r_aux);				
 			}
 		}
-		//if ((clientes[i].sock != -1) && (FD_ISSET(clientes[i].sock, &read_fds)))
-		else if ((clientes[i].sock != -1) && (FD_ISSET(clientes[i].sock, &read_fds)))
+		else if ((clientes[i].sock != -1)
+							&& (FD_ISSET(clientes[i].sock, &read_fds)))
 		{
 			if (clientes[i].recebeu_cabecalho == 0)
 			{
@@ -140,10 +163,6 @@ void processa_clientes(int recebido_from)
 				recebe_arquivo_put(i);
 			}
 		}
-		/*if (clientes[i].quit == 1)
-		{
-			encerra_cliente(i);
-		}*/
 	}
 }
 
@@ -166,7 +185,6 @@ int recebe_sinal_threads()
 		pthread_mutex_lock(&mutex_fila_response_get);
 		get_response *r_aux = retira_fila_response_get();
 		pthread_mutex_unlock(&mutex_fila_response_get);
-
 		envia_cliente(r_aux->indice, r_aux->buffer, r_aux->tam_buffer);
 		free(r_aux);
 	}
@@ -190,7 +208,8 @@ int aceita_conexoes (int pedido_cliente)
 				&& (ativos < MAXCLIENTS))
 	{
 		addrlen = sizeof(cliente);
-		sock_cliente = accept(sock_servidor, (struct sockaddr *)&cliente, &addrlen);
+		sock_cliente = accept(sock_servidor, (struct sockaddr *) &cliente,
+													&addrlen);
 		if (sock_cliente == -1)
 		{
 			perror("accept()");
@@ -244,7 +263,33 @@ void atualiza_readfd ()
  */
 void inicia_servidor (const int porta)
 {
-  sock_servidor = socket(PF_INET, SOCK_STREAM, 0);
+
+	/*! Conexao TCP */
+	atualiza_porta(porta);
+
+	/*! Conexao UDP */
+	sock_thread = socket(AF_UNIX, SOCK_DGRAM, 0);
+	if (sock_thread == -1)
+	{
+		perror("socket thread()");
+		exit(1);
+	}
+	
+	thread_addr.sun_family = AF_UNIX;
+	memcpy(thread_addr.sun_path, sock_path, sizeof(thread_addr.sun_path));
+	unlink(thread_addr.sun_path);
+
+	if(bind(sock_thread, (struct sockaddr *) &thread_addr, sizeof(thread_addr))
+			== -1)
+	{
+		perror("bind thread()");
+		exit(1);
+	}
+}
+
+void atualiza_porta (const int porta)
+{
+	sock_servidor = socket(PF_INET, SOCK_STREAM, 0);
   if (sock_servidor == -1)
   {
     perror("socket()");
@@ -276,24 +321,79 @@ void inicia_servidor (const int porta)
     perror("listen()");
 		exit(1);
   }
+}
 
-	sock_thread = socket(AF_UNIX, SOCK_DGRAM, 0);
-	if (sock_thread == -1)
+/*!
+ * \brief Recupera as configuracoes enviadas pela gui
+ */
+void atualiza_servidor ()
+{
+	FILE *fp;
+	int porta_gui = 0;
+	int size;
+	int size_gui;
+	char diretorio_gui[PATH_MAX+1];
+	long banda_gui = 0;
+
+	/*! Recupera arquivo CONFIG_PATH */
+	fp = fopen(config_path, "r");
+	if (fp == NULL)
 	{
-		perror("socket thread()");
-		exit(1);
+		perror("Atualizacao servidor");
+		return;
+	}
+
+	fscanf(fp, "%d", &porta_gui);
+	fscanf(fp, "%s", diretorio_gui);
+	fscanf(fp, "%ld", &banda_gui);
+
+	fclose(fp);
+
+	/*! Atualiza a porta se for diferente */
+	if (porta_atual != porta_gui)
+	{
+		close(sock_servidor);
+		atualiza_porta(porta_gui);
+		porta_atual = porta_gui;
+	}
+
+	/*! Atualiza o diretorio */
+	size = strlen(diretorio);
+	size_gui = strlen(diretorio_gui);
+	if(size != size_gui)
+	{
+		memset(diretorio, 0, size);
+		memcpy(diretorio, diretorio_gui, size_gui);
+	}
+	else if (strncmp(diretorio, diretorio_gui, size) != 0)
+	{
+		memset(diretorio, 0, size);
+		memcpy(diretorio, diretorio_gui, size);
 	}
 	
-	thread_addr.sun_family = AF_UNIX;
-	memcpy(thread_addr.sun_path, SOCK_PATH, sizeof(thread_addr.sun_path));
-	unlink(thread_addr.sun_path);
-
-	if(bind(sock_thread, (struct sockaddr *) &thread_addr, sizeof(thread_addr))
-			== -1)
+	if (chdir(diretorio) == -1)
 	{
-		perror("bind thread()");
-		exit(1);
+		perror("chdir()");
+		quit = 1;
+		encerra_servidor();
 	}
+
+	getcwd(diretorio, sizeof(diretorio));
+	if (diretorio == NULL)
+	{
+		perror("getcwd()");
+		quit = 1;
+		encerra_servidor();
+	}
+
+	/*! Atualiza a banda maxima */
+	if (banda_maxima != banda_gui)
+	{
+		banda_maxima = banda_gui;
+		atualiza_buffer_size();
+	}
+
+	escreve_arquivo_config(porta_atual, diretorio, banda_maxima);
 }
 
 /*!
@@ -332,7 +432,9 @@ void encerra_servidor ()
 
 	encerra_estruturas();
 
-	remove(SOCK_PATH);
+	remove(sock_path);
+	remove(config_path);
+	remove(pid_path);
 
 	close(sock_servidor);
 	close(sock_thread);
@@ -347,4 +449,13 @@ void signal_handler (int signum)
 {
 	printf("Recebido sinal %d\n", signum);
 	quit = 1;
+}
+
+/*!
+ * \brief Processa sinal SIGINT recebido pelo servidor
+ */
+void signal_interface (int signum)
+{
+	printf("Recebido sinal da interface: %d\n", signum);
+	alterar_config = 1;
 }

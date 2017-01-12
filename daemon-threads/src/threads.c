@@ -20,10 +20,10 @@ void cria_threads ()
 }
 
 /*!
- * \brief Funcao principal executada pelas threads trabalhadoras. Cria um socket
- * local para comunicacao com o servidor. Espera sinal da threads principal para
- * fazer leitura/escrita dos arquivos do cliente. Avisa a thread principal
- * quando termina seu trabalho.
+ * \brief Funcao principal executada pelas threads trabalhadoras. Cria um
+ * socket local para comunicacao com o servidor. Espera sinal da threads
+ * principal para fazer leitura/escrita dos arquivos do cliente. Avisa a thread
+ * principal quando termina seu trabalho.
  */
 void *funcao_thread (void *id)
 {
@@ -42,18 +42,21 @@ void *funcao_thread (void *id)
 		perror("sock local()");
 		return NULL;
 	}
+
 	addr_local.sun_family = AF_UNIX;
-	memcpy(addr_local.sun_path, SOCK_PATH, sizeof(addr_local.sun_path));
+	memcpy(addr_local.sun_path, sock_path, sizeof(addr_local.sun_path));
 
 	while (1)
 	{
 		pthread_mutex_lock(&mutex_master);
+		//fprintf(fp_log, "mutex_master LOCKED em funcao_threads(1) threads.c pela thread %ld\n", (long) id);
 
 		while (fila_request_get_vazia() && fila_request_put_vazia() && (quit == 0))
 		{
 			pthread_cond_wait(&condition_master, &mutex_master);
 		}
 		pthread_mutex_unlock(&mutex_master);
+// 		fprintf(fp_log, "mutex_master UNLOCKED em funcao_threads(1) threads.c pela thread %ld\n", (long) id);
 
 		if (quit)
 		{
@@ -75,7 +78,7 @@ void *funcao_thread (void *id)
 			pthread_mutex_unlock(&mutex_fila_request_get);
 
 			pthread_mutex_lock(&clientes_threads[indice].mutex);
-
+			
 			if (clientes[indice].tam_arquivo == clientes[indice].bytes_lidos)
 			{
 				pthread_mutex_unlock(&clientes_threads[indice].mutex);
@@ -101,7 +104,7 @@ void *funcao_thread (void *id)
 				pthread_mutex_lock(&mutex_fila_response_get);
 				insere_fila_response_get(buffer, indice, bytes_lidos);
 				pthread_mutex_unlock(&mutex_fila_response_get);
-
+				
 				pthread_mutex_unlock(&clientes_threads[indice].mutex);
 
 				if (sendto(sock_local, enviar, sizeof(enviar), 0, (struct sockaddr *)
@@ -135,7 +138,8 @@ void *funcao_thread (void *id)
 
 			while (frame != clientes[indice].frame_escrito)
 			{
-				pthread_cond_wait(&clientes_threads[indice].cond, &clientes_threads[indice].mutex);
+				pthread_cond_wait(&clientes_threads[indice].cond,
+													&clientes_threads[indice].mutex);
 			}
 
 			bytes_lidos = fwrite(buffer, tam_buffer, 1, clientes[indice].fp);

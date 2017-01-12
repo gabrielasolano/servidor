@@ -13,6 +13,7 @@ void formato_mensagem();
 int main (int argc, char **argv)
 {
   int porta;
+	char *home;
 
   if (argc < 3 || argc > 4)
   {
@@ -55,6 +56,15 @@ int main (int argc, char **argv)
     perror("getcwd()");
 		exit(1);
   }
+
+	home = getenv("HOME");
+	snprintf(config_path, sizeof(config_path), "%s/%s", home, CONFIG_PATH);
+	snprintf(sock_path, sizeof(sock_path), "%s/%s", home, SOCK_PATH);
+	snprintf(pid_path, sizeof(pid_path), "%s/%s", home, PID_PATH);
+
+  escreve_arquivo_config(porta, diretorio, banda_maxima);
+
+	escreve_arquivo_pid();
 
 	funcao_principal(porta);
 

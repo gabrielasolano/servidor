@@ -315,17 +315,9 @@ int recupera_caminho (int indice, char *pagina)
 
 	realpath(caminho, clientes[indice].caminho);
 
-	char *arquivo;
-	char *arquivo_cliente;
-	
-	arquivo = rindex(caminho, '/');
-	arquivo_cliente = rindex(clientes[indice].caminho, '/');
-	
-	if (strlen(arquivo) != strlen(arquivo_cliente))
-	{
-		return -1;
-	}
-	else if (strncmp(arquivo, arquivo_cliente, strlen(arquivo)) != 0)
+	/*! Nao permite diretorio */
+	int size = strlen(clientes[indice].caminho) - 1;
+	if (strncmp(clientes[indice].caminho+size, "/", 1) == 0)
 	{
 		return -1;
 	}
@@ -500,6 +492,10 @@ void cabecalho_put (int indice)
 			}
 		}
 		clientes[indice].fp = fopen(clientes[indice].caminho, "wb");
+		if (clientes[indice].tam_arquivo == 0)
+		{
+			clientes[indice].quit = 1;
+		}
 	}
 	else
   {

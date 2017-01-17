@@ -19,4 +19,5 @@ int recupera_tam_arquivo (int indice);
 void recebe_arquivo_put (int indice);
 int controle_banda (int indice);
 
+int bad_request (int indice, char *http_versao, char *pagina);
 #endif

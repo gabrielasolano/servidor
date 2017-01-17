@@ -13,8 +13,10 @@ Interface::Interface(QWidget *parent) :
 {
   ui->setupUi(this);
 
-  read_config();
-  update_interface();
+  if (read_config())
+  {
+    update_interface();
+  }
 }
 
 Interface::~Interface()
@@ -22,7 +24,7 @@ Interface::~Interface()
   delete ui;
 }
 
-void Interface::read_config ()
+bool Interface::read_config ()
 {
   QString path = QDir::homePath() + "/" + CONF_FILE;
   QFile file(path);
@@ -31,13 +33,15 @@ void Interface::read_config ()
   {
     QMessageBox::information(0, "Erro", "Nao foi possivel abrir o arquivo de "
                                         "configuracao.");
-    return;
+    return false;
   }
 
   QTextStream stream(&file);
   stream.operator >>(porta);
   stream.operator >>(diretorio);
   stream.operator >>(banda);
+
+  return true;
 }
 
 void Interface::update_interface ()
@@ -49,8 +53,11 @@ void Interface::update_interface ()
 
 void Interface::on_pushAplicar_clicked()
 {
-
-  read_config();
+  pid_t pid = get_pid();
+  if (pid == -1)
+  {
+    return;
+  }
 
   if (!check_parameters())
   {
@@ -59,8 +66,7 @@ void Interface::on_pushAplicar_clicked()
 
   create_configuration();
 
-  /*! Envia o sinal ao servidor */
-  if (kill(get_pid(), SIGUSR1) != 0)
+  if (kill(pid, SIGUSR1) != 0)
   {
     QMessageBox::information(0, "Erro", "Servidor nao atualizado.");
     return;
@@ -136,7 +142,7 @@ bool Interface::check_parameters ()
     QDir path;
     if (!path.exists(dnovo))
     {
-      QMessageBox::information(0, "Erro", "Informe o caminho completo.");
+      QMessageBox::information(0, "Erro", "O caminho informado nao existe.\n");
       return false;
     }
     diretorio = dnovo;
@@ -171,11 +177,33 @@ void Interface::on_pushCancelar_clicked()
 
 void Interface::on_pushEncerrar_clicked()
 {
-  /*! Envia o sinal ao servidor */
-  if (kill(get_pid(), SIGINT) != 0)
+  pid_t pid = get_pid();
+  if (pid == -1)
+  {
+    return;
+  }
+  if (kill(pid, SIGINT) != 0)
   {
     QMessageBox::information(0, "Erro", "Nao foi possivel encerrar o servidor");
     return;
   }
   QMessageBox::information(0, "Encerrado", "Servidor encerrado com sucesso.");
+  ui->labelPortaAtual->setText("Porta atual: ");
+  ui->labelDiretorioAtual->setText("Diretorio atual: ");
+  ui->labelBandaAtual->setText("Banda atual: ");
+}
+
+void Interface::on_buttonBox_clicked(QAbstractButton *button)
+{
+  if(ui->buttonBox->standardButton(button) == QDialogButtonBox::Close)
+  {
+    this->close();
+  }
+  else
+  {
+    if (read_config())
+    {
+      update_interface();
+    }
+  }
 }

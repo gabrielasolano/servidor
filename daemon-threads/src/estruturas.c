@@ -232,26 +232,6 @@ int tamanho_fila_request_put ()
 }
 
 /*!
- * \brief Verifica se a fila de GET requests esta vazia
- * \return 0 se nao vazia
- * \return 1 se vazia
- */
-int fila_request_get_vazia ()
-{
-	return STAILQ_EMPTY(&fila_request_get);
-}
-
-/*!
- * \brief Verifica se a fila de PUT requests esta vazia
- * \return 0 se nao vazia
- * \return 1 se vazia
- */
-int fila_request_put_vazia ()
-{
-	return STAILQ_EMPTY(&fila_request_put);
-}
-
-/*!
  * \brief Verifica se o arquivo pedido pelo cliente ja esta sendo utilizado em
  * algum request PUT
  * \param[in] indice Indice do cliente no array de clientes ativos

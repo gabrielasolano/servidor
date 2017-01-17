@@ -51,8 +51,6 @@ int tamanho_fila_request_put ();
 int arquivo_pode_utilizar (int indice, int arquivo_is_put);
 void insere_lista_arquivos(int indice, int arquivo_is_put);
 void remove_arquivo_lista (int indice);
-int fila_request_put_vazia();
-int fila_request_get_vazia();
 
 SLIST_HEAD(, Arquivos) lista_arquivos;
 STAILQ_HEAD(, GetResponse) fila_response_get_wait;

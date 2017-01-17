@@ -49,14 +49,13 @@ void *funcao_thread (void *id)
 	while (1)
 	{
 		pthread_mutex_lock(&mutex_master);
-		//fprintf(fp_log, "mutex_master LOCKED em funcao_threads(1) threads.c pela thread %ld\n", (long) id);
 
-		while (fila_request_get_vazia() && fila_request_put_vazia() && (quit == 0))
+		while (STAILQ_EMPTY(&fila_request_get) && STAILQ_EMPTY(&fila_request_put)
+					&& (quit == 0))
 		{
 			pthread_cond_wait(&condition_master, &mutex_master);
 		}
 		pthread_mutex_unlock(&mutex_master);
-// 		fprintf(fp_log, "mutex_master UNLOCKED em funcao_threads(1) threads.c pela thread %ld\n", (long) id);
 
 		if (quit)
 		{
@@ -101,11 +100,11 @@ void *funcao_thread (void *id)
 				clientes[indice].bytes_lidos += bytes_lidos;
 				clientes[indice].frame_recebido++;
 
+				pthread_mutex_unlock(&clientes_threads[indice].mutex);
+
 				pthread_mutex_lock(&mutex_fila_response_get);
 				insere_fila_response_get(buffer, indice, bytes_lidos);
 				pthread_mutex_unlock(&mutex_fila_response_get);
-				
-				pthread_mutex_unlock(&clientes_threads[indice].mutex);
 
 				if (sendto(sock_local, enviar, sizeof(enviar), 0, (struct sockaddr *)
 										&addr_local, sizeof(struct sockaddr_un)) == -1)

@@ -23,17 +23,20 @@ void encerra_cliente (int indice)
 	{
 		remove_arquivo_lista(indice);
 		FD_CLR(clientes[indice].sock, &read_fds);
-		printf("Encerrada conexao com socket %d\n",
-						clientes[indice].sock);
+		printf("Encerrada conexao com socket %d\n", clientes[indice].sock);
+
 		if (clientes[indice].fp != NULL)
 		{
 			fclose(clientes[indice].fp);
 		}
 		close(clientes[indice].sock);
 		zera_struct_cliente(indice);
+
 		ativos--;
 		if (ativos < 0)
+		{
 			ativos = 0;
+		}
 	}
 }
 
@@ -66,6 +69,7 @@ void envia_cliente (int indice, char mensagem[], int size)
 	{
 		size = clientes[indice].pode_enviar;
 	}
+
 	enviado = send(clientes[indice].sock, mensagem, size, MSG_NOSIGNAL);
 
 	if (enviado < 0)
@@ -74,13 +78,17 @@ void envia_cliente (int indice, char mensagem[], int size)
 		encerra_cliente(indice);
 		return;
 	}
+
 	clientes[indice].bytes_enviados += enviado;
-	clientes[indice].bytes_lidos = clientes[indice].bytes_enviados;
 	clientes[indice].bytes_por_envio += enviado;
 	clientes[indice].frame_escrito++;
 
-	if (clientes[indice].bytes_enviados
-				>= (unsigned) clientes[indice].tam_arquivo)
+	if (controle_velocidade)
+	{
+		clientes[indice].bytes_lidos = clientes[indice].bytes_enviados;
+	}
+
+	if (clientes[indice].bytes_enviados >= clientes[indice].tam_arquivo)
 	{
 		encerra_cliente(indice);
 	}
@@ -115,23 +123,13 @@ void cabecalho_parser (int indice)
 	pagina = strtok_r(NULL, " ", &contexto);
   http_versao = strtok_r(NULL, "\r", &contexto);
 
-	if (pagina == NULL || http_versao == NULL)
+
+	if (bad_request(indice, http_versao, pagina))
 	{
-		envia_cabecalho(indice, "HTTP/1.0 400 Bad Request\r\n\r\n", 1);
-		return;
-	}
-  else if ((strncmp(http_versao, "HTTP/1.0", 8) != 0)
-						&& (strncmp(http_versao, "HTTP/1.1", 8) != 0))
-  {
 		envia_cabecalho(indice, "HTTP/1.0 400 Bad Request\r\n\r\n", 1);
 		return;
 	}
 
-	if (recupera_caminho(indice, pagina) == -1)
-	{
-		envia_cabecalho(indice, "HTTP/1.0 400 Bad Request\r\n\r\n", 1);
-		return;
-	}
 	size_strlen = strlen(diretorio);
   if (strncmp(diretorio, clientes[indice].caminho, size_strlen * sizeof(char))
 				!= 0)
@@ -176,6 +174,29 @@ void cabecalho_parser (int indice)
 }
 
 /*!
+ * \brief Verifica se o request do cliente 'e valido
+ * \return 1 se encontrado erro 'Bad Request'
+ * \return 0 se nao encontrado erro 'Bad Request'
+ */
+int bad_request (int indice, char *http_versao, char *pagina)
+{
+	if (pagina == NULL || http_versao == NULL)
+	{
+		return 1;
+	}
+  else if ((strncmp(http_versao, "HTTP/1.0", 8) != 0)
+						&& (strncmp(http_versao, "HTTP/1.1", 8) != 0))
+  {
+		return 1;
+	}
+
+	if (recupera_caminho(indice, pagina) == -1)
+	{
+		return 1;
+	}
+	return 0;
+}
+/*!
  * \brief Recebe o cabecalho do cliente
  * \param[in] indice Indice do cliente no array de clientes ativos
  */
@@ -217,13 +238,13 @@ void recebe_cabecalho_cliente (int indice)
 		perror("recv()");
 		if (errno != EBADF)
 		{
-			encerra_cliente (indice);
+			clientes[indice].quit = 1;
 		}
 	}
 	else if (bytes == 0)
 	{
 		printf("Socket %d encerrou a conexao.\n", sock);
-		encerra_cliente (indice);
+		clientes[indice].quit = 1;
 	}
 	else
 	{

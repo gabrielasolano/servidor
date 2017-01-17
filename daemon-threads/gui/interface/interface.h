@@ -35,13 +35,15 @@ private slots:
 
   void create_configuration ();
 
-  void read_config ();
+  bool read_config ();
 
   void update_interface ();
 
   pid_t get_pid();
 
   void on_pushEncerrar_clicked();
+
+  void on_buttonBox_clicked(QAbstractButton *button);
 
 private:
   Ui::Interface *ui;

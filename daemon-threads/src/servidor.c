@@ -52,6 +52,7 @@ void funcao_principal (int porta)
 
 	timerclear(&timeout);
 	max_fd = sock_servidor;
+	ativos = 0;
 
 	cria_threads();
 
@@ -60,6 +61,9 @@ void funcao_principal (int porta)
   {
 		FD_ZERO(&read_fds);
 		FD_SET(sock_servidor, &read_fds);
+
+		max_fd = sock_servidor;
+		atualiza_readfd();
 
 		if (ativos > 0)
     {
@@ -89,12 +93,10 @@ void funcao_principal (int porta)
 						 porta_atual, diretorio, banda_maxima);
 			alterar_config = 0;
 		}
-		
-		atualiza_readfd();
 
 		if (!aceita_conexoes(pedido_cliente))
 		{
-			break;
+			encerra_servidor();
 		}
 
 		recebido_from = recebe_sinal_threads();
@@ -141,17 +143,27 @@ void processa_clientes(int recebido_from)
 
 	for (i = 0; i < MAXCLIENTS; i++)
 	{
-		if ((recebido_from == -1) &&
-					(clientes[i].frame_recebido > clientes[i].frame_escrito))
+		if (clientes[i].quit == 1)
 		{
-			if (!STAILQ_EMPTY(&fila_response_get_wait))
+			encerra_cliente(i);
+			continue;
+		}
+
+		if (controle_velocidade)
+		{
+			if ((recebido_from == -1) &&
+					(clientes[i].frame_recebido > clientes[i].frame_escrito))
 			{
-				get_response *r_aux = retira_fila_response_get_wait();
-				envia_cliente(r_aux->indice, r_aux->buffer, r_aux->tam_buffer);
-				free(r_aux);				
+				if (!STAILQ_EMPTY(&fila_response_get_wait))
+				{
+					get_response *r_aux = retira_fila_response_get_wait();
+					envia_cliente(r_aux->indice, r_aux->buffer, r_aux->tam_buffer);
+					free(r_aux);
+				}
 			}
 		}
-		else if ((clientes[i].sock != -1)
+
+		if ((clientes[i].sock != -1)
 							&& (FD_ISSET(clientes[i].sock, &read_fds)))
 		{
 			if (clientes[i].recebeu_cabecalho == 0)
@@ -174,18 +186,18 @@ void processa_clientes(int recebido_from)
  */
 int recebe_sinal_threads()
 {
-	socklen_t addrlen;
 	int retorno;
 	char recebido[3];
 	
-	addrlen = sizeof(thread_addr);
-	while ((retorno = recvfrom(sock_thread, recebido, sizeof(recebido),
-		MSG_DONTWAIT, (struct sockaddr *) &thread_addr, &addrlen)) > 0)
+	while((retorno = recv(sock_thread, recebido, sizeof(recebido),
+					MSG_DONTWAIT)) > 0)
 	{
 		pthread_mutex_lock(&mutex_fila_response_get);
 		get_response *r_aux = retira_fila_response_get();
 		pthread_mutex_unlock(&mutex_fila_response_get);
+
 		envia_cliente(r_aux->indice, r_aux->buffer, r_aux->tam_buffer);
+
 		free(r_aux);
 	}
 	return retorno;
@@ -203,6 +215,7 @@ int aceita_conexoes (int pedido_cliente)
 	struct sockaddr_in cliente;
   socklen_t addrlen;
   int sock_cliente;
+	int i;
 
 	if ((pedido_cliente > 0) && FD_ISSET(sock_servidor, &read_fds)
 				&& (ativos < MAXCLIENTS))
@@ -217,8 +230,19 @@ int aceita_conexoes (int pedido_cliente)
 		}
 		else
 		{
-			clientes[ativos].sock = sock_cliente;
-			clientes[ativos].pode_enviar = buffer_size;
+			/*! Recupera a primeira posicao livre no array de clientes */
+			i = 0;
+			while (i < MAXCLIENTS)
+			{
+				if (clientes[i].sock == -1)
+				{
+					break;
+				}
+				i++;
+			}
+
+			clientes[i].sock = sock_cliente;
+			clientes[i].pode_enviar = buffer_size;
 
 			ativos++;
 
@@ -243,16 +267,20 @@ void atualiza_readfd ()
 
 	for (i = 0; i < MAXCLIENTS; i++)
 	{
-		if (clientes[i].quit == 1)
-		{
-			encerra_cliente(i);
-			break;
-		}
 		if (clientes[i].sock != -1)
 		{
-			FD_SET(clientes[i].sock, &read_fds);
-			if (clientes[i].sock > max_fd)
-				max_fd = clientes[i].sock;
+			if (clientes[i].quit == 1)
+			{
+				encerra_cliente(i);
+			}
+			else
+			{
+				FD_SET(clientes[i].sock, &read_fds);
+				if (clientes[i].sock > max_fd)
+				{
+					max_fd = clientes[i].sock;
+				}
+			}
 		}
 	}
 }
@@ -268,7 +296,7 @@ void inicia_servidor (const int porta)
 	atualiza_porta(porta);
 
 	/*! Conexao UDP */
-	sock_thread = socket(AF_UNIX, SOCK_DGRAM, 0);
+	sock_thread = socket(AF_UNIX, (SOCK_DGRAM | SOCK_NONBLOCK), 0);
 	if (sock_thread == -1)
 	{
 		perror("socket thread()");
@@ -391,6 +419,16 @@ void atualiza_servidor ()
 	{
 		banda_maxima = banda_gui;
 		atualiza_buffer_size();
+	}
+
+	if (!controle_velocidade)
+	{
+		while (!STAILQ_EMPTY(&fila_response_get_wait))
+		{
+			get_response *r_aux = retira_fila_response_get_wait();
+			envia_cliente(r_aux->indice, r_aux->buffer, r_aux->tam_buffer);
+			free(r_aux);
+		}
 	}
 
 	escreve_arquivo_config(porta_atual, diretorio, banda_maxima);
